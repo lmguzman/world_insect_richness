@@ -77,8 +77,9 @@ acg_latlong <- ggplot() +
   #geom_sf(data = Guanacaste_p, fill = 'transparent') +
   geom_sf_pattern(data = acg_bc, fill = 'white', pattern="stripe") +
   geom_sf(data = acg_zv) +
-  geom_sf(data = filter(lat_lon_reared, lat > 10.5), aes(color = 'green'), size = 0.7) +
-  geom_sf(data = st_jitter(lat_lon_malaise, factor = 0.01), aes(color = Category), size = 2) +
+  geom_sf(data = filter(lat_lon_reared, lat > 10.5), aes(fill = 'green'), size = 0.7, shape = 21, color = '#2F9862') +
+  geom_sf(data = st_jitter(filter(lat_lon_malaise, Category == 'Peripherie'), factor = 0.01), aes(fill = 'blue'), size = 2, shape = 21, color = 'black') +
+  geom_sf(data = st_jitter(filter(lat_lon_malaise, Category == 'Core'), factor = 0.01), aes(fill = 'black'), size = 2, shape = 21, color = 'black') +
   theme_cowplot() +
   theme(axis.title=element_blank(),
         axis.text=element_blank(),
@@ -87,12 +88,13 @@ acg_latlong <- ggplot() +
         legend.text = element_text(size = 11), 
         legend.position = 'bottom',
         legend.box = 'vertical') +
-  #annotation_scale() +
+  annotation_scale() +
   #annotation_north_arrow(location = 'tl', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) +
-  scale_color_discrete(labels = c("Core\n traps", "Reared", "Peripheral\n traps"), name = '') 
+  scale_fill_discrete(labels = c("Core\n traps", "Peripheral\n traps", "Reared"), name = '', type = c('#FFAA0F', '#4067E2', '#2F9862')) 
   #scale_size_area(breaks = c(1,50,100,150), limits = c(1,200), name = 'N. Bins')
 
-acg_all <- plot_grid(acg_guanacaste,acg_latlong, labels = c("A.", "B."))   
+acg_all <- plot_grid(acg_latlong, acg_guanacaste, labels = c("A", "B"),  rel_widths = c(0.7, 0.3),
+                     rel_heights = c(0.7, 0.3))   
 
 ggsave(acg_all, filename = 'Figures/Figure1.jpeg') 
 
