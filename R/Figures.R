@@ -5,6 +5,7 @@ library(dplyr)
 library(ggspatial)
 #remotes::install_github("wmgeolab/rgeoboundaries")
 library(rgeoboundaries)
+library(ggpattern)
 
 ### read in points
 
@@ -72,23 +73,12 @@ acg_guanacaste <- ggplot() +
   annotation_scale() +
   annotation_north_arrow(location = 'tl', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) 
 
-
-lat_lon_con <- lat_lon_malaise %>% 
-  st_join(acg)
-
-con_areas3 <- con_areas %>% 
-  st_filter(lat_lon_malaise)
-st_union()
-
-lat_lon_reared %>%
-  filter(lat >10.5)
-
 acg_latlong <- ggplot() +
   #geom_sf(data = Guanacaste_p, fill = 'transparent') +
-  geom_sf(data = acg_bc, fill = 'black') +
+  geom_sf_pattern(data = acg_bc, fill = 'white', pattern="stripe") +
   geom_sf(data = acg_zv) +
-  geom_sf(data = st_jitter(lat_lon_malaise, factor = 0.01), aes(color = Category, size = `BIN..`)) +
-  geom_sf(data = filter(lat_lon_reared, lat > 10.5), aes(color = 'green'), size = 0.5) +
+  geom_sf(data = filter(lat_lon_reared, lat > 10.5), aes(color = 'green'), size = 0.7) +
+  geom_sf(data = st_jitter(lat_lon_malaise, factor = 0.01), aes(color = Category), size = 2) +
   theme_cowplot() +
   theme(axis.title=element_blank(),
         axis.text=element_blank(),
@@ -99,8 +89,8 @@ acg_latlong <- ggplot() +
         legend.box = 'vertical') +
   #annotation_scale() +
   #annotation_north_arrow(location = 'tl', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) +
-  scale_color_discrete(labels = c("Core\n traps", "Reared", "Peripheral\n traps"), name = '') +
-  scale_size_area(breaks = c(1,50,100,150), limits = c(1,200), name = 'N. Bins')
+  scale_color_discrete(labels = c("Core\n traps", "Reared", "Peripheral\n traps"), name = '') 
+  #scale_size_area(breaks = c(1,50,100,150), limits = c(1,200), name = 'N. Bins')
 
 acg_all <- plot_grid(acg_guanacaste,acg_latlong, labels = c("A.", "B."))   
 

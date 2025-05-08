@@ -158,7 +158,7 @@ CI_total_insect_acg
 
 ##### Total insects 
 
-print("Total world insects estimated tree richness")
+print("Total world insects based on estimated tree richness")
 
 total_insect_world <- (TW*total_insec_acg)/TA 
 total_insect_world
@@ -167,7 +167,7 @@ CI_total_insect_world <- (TW*CI_total_insect_acg)/TA
 
 CI_total_insect_world
 
-print("Total world insects described trees")
+print("Total world insects based on described trees")
 
 total_insect_world <- (TW_d*total_insec_acg)/TA 
 total_insect_world
@@ -183,130 +183,12 @@ CI_total_insect_world
 
 ##### Total insects 
 
-print("Total world insects")
+print("Total world insects based on Saturniid moths")
 
 total_insect_world <- (SW*total_insec_acg)/SA 
 total_insect_world
 
 CI_total_insect_world <- (SW*CI_total_insect_acg)/SA 
-
-CI_total_insect_world
-
-```
-
-# Approach 2: Calculate insect richness worldwide using the Chao estimator for Microgastrinae and for ACG malaise insects
-
-## Step 1: Combining Malaise and Reared samples of Microgastrinae and estimating the true richness of ACG Microgastrinae
-
-```{r}
-
-full_micro_table <- reared %>% 
-  rename(reared = Frequency) %>% 
-  full_join(rename(core, core = Frequency)) %>% 
-  full_join(rename(peri, peri = Frequency)) %>% 
-  mutate(reared = ifelse(is.na(reared), 0, 1)) %>% 
-  mutate(core = ifelse(is.na(core), 0, 1)) %>% 
-  mutate(peri = ifelse(is.na(peri), 0, 1))
-
-head(full_micro_table)
-
-nrow(full_micro_table)
-
-# Transform observed ../Data to CARE1 input format
-micro_care <- as.record(full_micro_table[,-1])
-
-micro_care
-
-# Main step to obtain population size estimates
-CARE1.print(micro_care)
-
-# Print the CARE1 input format
-
-## n1 = reared = 886
-## n2 = core = 388
-## n3 = peripheral = 576
-
-## Using Nhat-1
-
-Nhat1 <- round(estN(micro_care, method = "LSC", se = TRUE, nboot = 200))
-
-micro_all_estimate <- Nhat1[1]
-micro_all_CI <- c(Nhat1[3], Nhat1[4])
-```
-
-## Step 2. Estimating the undersampling ratio for Core Microgastrinae.
-
-```{r}
-## proportion of core malaise of the ichao total 
-
-proportion_core <- nrow(core)/micro_all_estimate
-
-proportion_core
-
-CI_proportion_core <- nrow(core)/micro_all_CI
-
-CI_proportion_core
-```
-
-## Step 3 Estimate using iChao1 total number of insects in ACG
-
-```{r}
-## Total number of insecta bins in ACG core malaise -- ran the Chao estimator before because it takes a long time to render 
-
-#insc_acg_estimate <- ChaoSpecies(insc$Frequency,"abundance",k=10,conf=0.95)
-
-insc_acg_estimate <-readRDS("../Data/insecta_acg_chao.rds")
-
-n_insects_core <- insc_acg_estimate$Species_table[estimator,]
-n_insects_core
-```
-
-```{r}
-
-## Calculate total number of insects in ACG
-total_insec_acg <- MOVERR(theta1 = n_insects_core['Estimate'], ci1 = c(n_insects_core['95%Lower'], n_insects_core['95%Upper']), theta0 = proportion_core, ci0 = CI_proportion_core)
-
-total_insec_acg$estimate
-
-total_insec_acg$conf.int
-```
-
-## Step 4. Estimating global insect richness – based on trees
-
-```{r}
-
-##### Total insects 
-
-print("Total insects estimated tree richness ")
-
-total_insect_world <- (TW*total_insec_acg$estimate)/TA 
-total_insect_world
-
-CI_total_insect_world <- (TW*total_insec_acg$conf.int)/TA 
-
-CI_total_insect_world
-
-print("Total insects described tree richness")
-
-
-total_insect_world <- (TW_d*total_insec_acg$estimate)/TA 
-total_insect_world
-
-CI_total_insect_world <- (TW_d*total_insec_acg$conf.int)/TA 
-
-CI_total_insect_world
-```
-
-## Step 4. Estimating global insect richness – based saturniidae moths
-
-```{r}
-
-##### Total insects 
-
-total_insect_world <- (SW*total_insec_acg$estimate)/SA 
-total_insect_world
-
-CI_total_insect_world <- (SW*total_insec_acg$conf.int)/SA 
 
 CI_total_insect_world
 
@@ -333,8 +215,8 @@ micro_all_estimate <- ChaoSpecies(micro_all$new_freq,"abundance",k=10,conf=0.95)
 
 micro_all_estimate$Species_table[estimator,]
 ## from spade R
-micro_all_estimate$Basic_data_information[c("    CV for entire ../Dataset",
-                                            "    Coverage estimate for entire ../Dataset"),]
+micro_all_estimate$Basic_data_information[c("    CV for entire dataset",
+                                            "    Coverage estimate for entire dataset"),]
 
 ## based on coverage spreadsheet 
 
@@ -364,8 +246,8 @@ Sample Coverage For Core Malaise Microgastrinae.
 ## from Spade R
 micro_core_estimate <- ChaoSpecies(core$Frequency,"abundance",k=10,conf=0.95)
 
-micro_core_estimate$Basic_data_information[c("    CV for entire ../Dataset",
-                                            "    Coverage estimate for entire ../Dataset"),]
+micro_core_estimate$Basic_data_information[c("    CV for entire dataset",
+                                            "    Coverage estimate for entire dataset"),]
 
 ## calculating from the spreadsheet
 
@@ -395,8 +277,10 @@ Sample Coverage For Core Insecta
 ```{r}
 ## from spade R
 
-insc_acg_estimate$Basic_data_information[c("    CV for entire ../Dataset",
-                                            "    Coverage estimate for entire ../Dataset"),]
+insc_acg_estimate <- readRDS("../Data/insecta_acg_chao.rds")
+
+insc_acg_estimate$Basic_data_information[c("    CV for entire dataset",
+                                            "    Coverage estimate for entire dataset"),]
 
 insecta <- read.csv("../Data/Insecta ACG Core Malaise.csv")
 
@@ -420,7 +304,7 @@ CV_insecta
 
 ```
 
-## Number of singletons and  sample coverage for Core Malaise for each taxonomic level (Braconidae, Ichneumonoidea, and Hymenoptera). 
+## Number of singletons and sample coverage for Core Malaise for each taxonomic level (Braconidae, Ichneumonoidea, and Hymenoptera).
 
 ### Braconidae
 
