@@ -70,8 +70,11 @@ acg_guanacaste <- ggplot() +
         axis.ticks=element_blank(), 
         axis.line = element_blank(),
         legend.text = element_text(size = 11)) +
-  annotation_scale() +
-  annotation_north_arrow(location = 'tl', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) 
+  annotation_scale()
+
+north_arrow_plot <- ggplot()+ 
+  annotation_north_arrow(location = 'tl', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) +
+  theme_cowplot()
 
 acg_latlong <- ggplot() +
   #geom_sf(data = Guanacaste_p, fill = 'transparent') +
@@ -93,9 +96,12 @@ acg_latlong <- ggplot() +
   scale_fill_discrete(labels = c("Core\n traps", "Peripheral\n traps", "Reared"), name = '', type = c('#FFAA0F', '#4067E2', '#2F9862')) 
   #scale_size_area(breaks = c(1,50,100,150), limits = c(1,200), name = 'N. Bins')
 
-acg_all <- plot_grid(acg_latlong, acg_guanacaste, labels = c("A", "B"),  rel_widths = c(0.7, 0.3),
-                     rel_heights = c(0.7, 0.3))   
+acg_all <- plot_grid(acg_latlong,  acg_guanacaste, labels = c("A", "B"),  rel_widths = c(0.7, 0.3), nrow = 1)   
 
-ggsave(acg_all, filename = 'Figures/Figure1.jpeg') 
+
+acg_all_final <- acg_all +
+  annotation_north_arrow(location = 'tr', height = unit(0.7, 'cm'), width = unit(0.7, "cm")) 
+
+ggsave(acg_all_final, filename = 'Figures/Figure1.jpeg') 
 
 
