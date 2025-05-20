@@ -41,6 +41,7 @@ estimator <- "    iChao1 (Chiu et al. 2014)"
 
 #TA = number of tree species in ACG
 TA <- 1500
+TA_alt <- 1200
 
 #Tc = number of tree species in CR
 
@@ -173,6 +174,26 @@ total_insect_world <- (TW_d*total_insec_acg)/TA
 total_insect_world
 
 CI_total_insect_world <- (TW_d*CI_total_insect_acg)/TA 
+
+CI_total_insect_world
+
+##### Total insects 
+
+print("Total world insects based on estimated tree richness")
+
+total_insect_world <- (TW*total_insec_acg)/TA_alt 
+total_insect_world
+
+CI_total_insect_world <- (TW*CI_total_insect_acg)/TA_alt 
+
+CI_total_insect_world
+
+print("Total world insects based on described trees")
+
+total_insect_world <- (TW_d*total_insec_acg)/TA_alt 
+total_insect_world
+
+CI_total_insect_world <- (TW_d*CI_total_insect_acg)/TA_alt
 
 CI_total_insect_world
 ```
