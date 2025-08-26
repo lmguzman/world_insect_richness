@@ -53,6 +53,8 @@ TC <- 2500
 TW <- 73274
 TW_CI <- c(73271, 73276)
 
+TW_2 <- 89147
+
 ## described number of tree species 
 
 TW_d <- 60065
@@ -215,204 +217,33 @@ CI_total_insect_world
 
 ```
 
-# Additional Information
 
-For Pooled Microgastrinae CV and Sample Coverage: 1-\[number singletons\]/\[number specimens\].
-
-```{r}
-### Combine all microgastrinae
-
-micro_all <- rbind(reared, core, peri) %>% 
-  group_by(BOLD.code) %>% 
-  summarise(new_freq = sum(Frequency)) %>% 
-  select(BOLD.code, new_freq)
-
-## number of pooled micros
-nrow(micro_all)
-
-## use chao on microgastrinae
-
-micro_all_estimate <- ChaoSpecies(micro_all$new_freq,"abundance",k=10,conf=0.95)
-
-micro_all_estimate$Species_table[estimator,]
-## from spade R
-micro_all_estimate$Basic_data_information[c("    CV for entire dataset",
-                                            "    Coverage estimate for entire dataset"),]
-
-## based on coverage spreadsheet 
-
-total_bins <- nrow(micro_all)
-total_bins
-
-total_singletons_micro_all <- sum(micro_all$new_freq ==1)
-total_singletons_micro_all
-
-total_doubletons_micro_all <- sum(micro_all$new_freq ==2)
-total_doubletons_micro_all
-
-# total samples
-sum(micro_all$new_freq)
-
-coverage_micro_all <- 1-(total_singletons_micro_all/sum(micro_all$new_freq))
-coverage_micro_all
-
-CV_micro_all <- sd(micro_all$new_freq)/mean(micro_all$new_freq)
-CV_micro_all
-```
-
-Sample Coverage For Core Malaise Microgastrinae.
+## An alternative estimate
 
 ```{r}
 
-## from Spade R
-micro_core_estimate <- ChaoSpecies(core$Frequency,"abundance",k=10,conf=0.95)
+##### Total insects 
 
-micro_core_estimate$Basic_data_information[c("    CV for entire dataset",
-                                            "    Coverage estimate for entire dataset"),]
+print("Total world insects based on estimated tree richness")
 
-## calculating from the spreadsheet
+total_insect_world <- (TW_2*total_insec_acg)/TA 
+total_insect_world
 
-total_bins <- nrow(core)
-total_bins
+CI_total_insect_world <- (TW_2*CI_total_insect_acg)/TA 
 
-total_singletons_core <- sum(core$Frequency ==1)
-total_singletons_core
+CI_total_insect_world
 
-total_doubletons_core <- sum(core$Frequency ==2)
-total_doubletons_core
 
-# total samples
-sum(core$Frequency)
+##### Total insects 
 
-coverage_core <- 1-(total_singletons_core/sum(core$Frequency))
-coverage_core
+print("Total world insects based on estimated tree richness")
 
-CV_core <- sd(core$Frequency)/mean(core$Frequency)
-CV_core
+total_insect_world <- (TW_2*total_insec_acg)/TA_alt 
+total_insect_world
 
+CI_total_insect_world <- (TW_2*CI_total_insect_acg)/TA_alt 
+
+CI_total_insect_world
 
 ```
 
-Sample Coverage For Core Insecta
-
-```{r}
-## from spade R
-
-insc_acg_estimate <- readRDS("../Data/insecta_acg_chao.rds")
-
-insc_acg_estimate$Basic_data_information[c("    CV for entire dataset",
-                                            "    Coverage estimate for entire dataset"),]
-
-insecta <- read.csv("../Data/Insecta ACG Core Malaise.csv")
-
-## from the spreadsheet
-
-total_bins <- nrow(insecta)
-total_bins
-
-total_singletons_insecta <- sum(insecta$Frequency ==1)
-total_singletons_insecta
-
-total_doubletons_insecta <- sum(insecta$Frequency ==2)
-total_doubletons_insecta
-
-coverage_insecta <- 1-(total_singletons_insecta/sum(insecta$Frequency))
-coverage_insecta
-
-CV_insecta <- sd(insecta$Frequency)/mean(insecta$Frequency)
-CV_insecta
-
-
-```
-
-## Number of singletons and sample coverage for Core Malaise for each taxonomic level (Braconidae, Ichneumonoidea, and Hymenoptera).
-
-### Braconidae
-
-```{r}
-
-braconidae <- read.csv("../Data/Braconidae ACG Core Malaise.csv")
-
-## from the spreadsheet
-
-total_bins <- nrow(braconidae)
-total_bins
-
-total_singletons_braconidae <- sum(braconidae$Frequency ==1)
-total_singletons_braconidae
-
-total_doubletons_braconidae <- sum(braconidae$Frequency ==2)
-total_doubletons_braconidae
-
-## total number of samples
-
-sum(braconidae$Frequency)
-
-coverage_braconidae <- 1-(total_singletons_braconidae/sum(braconidae$Frequency))
-coverage_braconidae
-
-CV_braconidae <- sd(braconidae$Frequency)/mean(braconidae$Frequency)
-CV_braconidae
-
-
-```
-
-### Ichneumonoidea
-
-```{r}
-
-ichneumonoidea <- read.csv("../Data/Ichneumonoidea ACG Core Malaise.csv")
-
-## from the spreadsheet
-
-total_bins <- nrow(ichneumonoidea)
-total_bins
-
-total_singletons_ichneumonoidea <- sum(ichneumonoidea$Frequency ==1)
-total_singletons_ichneumonoidea
-
-total_doubletons_ichneumonoidea <- sum(ichneumonoidea$Frequency ==2)
-total_doubletons_ichneumonoidea
-
-## total number of samples
-
-sum(ichneumonoidea$Frequency)
-
-coverage_ichneumonoidea <- 1-(total_singletons_ichneumonoidea/sum(ichneumonoidea$Frequency))
-coverage_ichneumonoidea
-
-CV_ichneumonoidea <- sd(ichneumonoidea$Frequency)/mean(ichneumonoidea$Frequency)
-CV_ichneumonoidea
-
-
-```
-
-### Hymenoptera
-
-```{r}
-
-hymenoptera <- read.csv("../Data/Hymenoptera ACG Core Malaise.csv")
-
-## from the spreadsheet
-
-total_bins <- nrow(hymenoptera)
-total_bins
-
-total_singletons_hymenoptera <- sum(hymenoptera$Frequency ==1)
-total_singletons_hymenoptera
-
-total_doubletons_hymenoptera <- sum(hymenoptera$Frequency ==2)
-total_doubletons_hymenoptera
-
-## total number of samples
-
-sum(hymenoptera$Frequency)
-
-coverage_hymenoptera <- 1-(total_singletons_hymenoptera/sum(hymenoptera$Frequency))
-coverage_hymenoptera
-
-CV_hymenoptera <- sd(hymenoptera$Frequency)/mean(hymenoptera$Frequency)
-CV_hymenoptera
-
-
-```
