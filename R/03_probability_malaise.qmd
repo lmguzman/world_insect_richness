@@ -1,0 +1,826 @@
+---
+title: "R code and output for Appendix S1"
+format: pdf
+editor: visual
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE) # or whatever options you prefer
+options(digits = 3)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(cowplot)
+library(brms)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(tidyr)
+library(vegan)
+library(purrr)
+```
+
+## Get data from DanielSoutoV et al.
+
+Data downloaded from: https://doi.org/10.5281/zenodo.16586355
+
+Load the data and the site metadata
+
+```{r}
+BIN_table <- read.csv("../Data/DanielSoutoV-MEE/Table S6 BIN table.csv")
+
+metadata <- read.csv("../Data/DanielSoutoV-MEE/metadata.csv")
+
+head(BIN_table[,1:5])
+```
+
+Re-shape the data and the aggregate by the number of bins collected for each order vs. those collected by each trapping method
+
+```{r}
+## reshape the data
+long_bin <- BIN_table %>% 
+  mutate(Order = str_extract(classification, "o__[A-Z][a-z]*")) %>% 
+  mutate (Class = str_extract(classification, "c__[A-Z][a-z]*")) %>% 
+  filter(Class == "c__Insecta") %>% 
+  select(-classification, -total_count, -Class) %>% 
+  pivot_longer(values_to = "abundance", names_to = "sample", -c(bin_uri, Order)) %>% 
+  filter(abundance > 0) %>% 
+  left_join(select(metadata, sample, trap_name)) %>% 
+  mutate(Order = str_remove(Order, "o__")) %>% 
+  select(-sample) %>% unique()
+
+## get bin counts for malaise trapping
+trap_counts <- long_bin %>% 
+  group_by(Order, trap_name) %>% 
+  count() %>% 
+  filter(trap_name == 'Malaise trap')
+
+## get bin counts for each order
+order_counts <- long_bin %>% 
+  select(bin_uri, Order) %>% 
+  unique() %>% 
+  group_by(Order) %>% 
+  count() %>% 
+  rename(order_total = n)
+
+## join and calculate the percentage of bins coming from malaise trapping
+percentage_count  <- order_counts %>% 
+  left_join(trap_counts) %>% 
+  mutate(n = ifelse(is.na(n), 0, n)) %>% 
+  mutate(percentage = n/order_total) %>% 
+  select(-trap_name, number_bins_malaise = n, number_bins_order = order_total) %>% 
+  mutate(Species_Unique_Other_methods = number_bins_order - number_bins_malaise)
+
+percentage_count
+
+write.csv(percentage_count, "../summary_percent_malaise.csv", row.names = FALSE)
+```
+
+## Multi-level model to estimate probability of malaise catchability overall and by order
+
+Fit multi-level intercept model to calculate intercept for each order
+
+```{r, message = FALSE, error=FALSE, warning=FALSE}
+mm_bin <- brm(data = percentage_count, 
+              family = binomial,
+              number_bins_malaise | trials(number_bins_order) ~ 1 + (1 | Order),
+              prior = c(prior(normal(0, 1.5), class = Intercept),  # alpha bar
+                        prior(exponential(1), class = sd)),        # sigma
+              iter = 5000, warmup = 1000, chains = 4, cores = 4,
+              sample_prior = "yes",
+              seed = 13)
+
+
+```
+
+Check the model summary
+
+```{r}
+summary(mm_bin)
+```
+
+Get posterior distributions, estimate means and CI, and transform back to probabilities.
+
+Note that post_mdn, post_Q2.5, post_Q97.5, are the mean and credible interval probabilities after transformation back to proportion, while Estimate, Q2.5, and Q97.5 are in the linear scale.
+
+```{r}
+## get posterior draws
+post <- as_draws_df(mm_bin)
+
+## Join posterior for each order with original counts 
+post_mdn <- 
+  coef(mm_bin, robust = T)$Order[, , ] %>% 
+  data.frame() %>% 
+  bind_cols(select(percentage_count, Order, 
+                   number_bins_order, number_bins_malaise)) %>%
+  mutate(post_mdn = inv_logit_scaled(Estimate)) %>% 
+  mutate(post_Q2.5 = inv_logit_scaled(Q2.5), 
+         post_Q97.5=inv_logit_scaled(Q97.5)) %>% 
+  mutate(percentage_raw = number_bins_malaise/number_bins_order) %>% 
+  select(Order, number_bins_order, number_bins_malaise, 
+         percentage_raw, starts_with('post'), 
+         Estimate:`Q97.5`)
+
+rownames(post_mdn) <- NULL
+
+post_mdn
+```
+
+Visualize new results
+
+```{r, fig.height = 4}
+probability_caught_malaise_fig <- post_mdn %>%
+  ggplot(aes(x = Order)) +
+  geom_hline(yintercept = inv_logit_scaled(mean(post$b_Intercept)), 
+             linetype = 1, linewidth = 1/4) +
+  geom_hline(yintercept = inv_logit_scaled(quantile(post$b_Intercept, 0.025)), 
+             linetype = 2, linewidth = 1/4) +
+  geom_hline(yintercept = inv_logit_scaled(quantile(post$b_Intercept, 0.975)), 
+             linetype = 2, linewidth = 1/4) +
+  geom_point(aes(y = percentage_raw), color = "orange2") +
+  geom_point(aes(y = post_mdn), shape = 1) +
+  geom_linerange(aes(ymin = post_Q2.5, ymax=post_Q97.5))+
+  scale_y_continuous(breaks = 0:5 / 5, limits = c(0, 1)) +
+  theme_cowplot() +
+  ylab('Probability of being \n caught by a Malaise trap') +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+probability_caught_malaise_fig
+
+ggsave(probability_caught_malaise_fig, filename =  "../Figures/probability_caught_malaise_fig.jpeg")
+
+```
+
+Get overall level mean and CI
+
+```{r}
+inv_logit_scaled(mean(post$b_Intercept))
+inv_logit_scaled(quantile(post$b_Intercept, 0.025))
+inv_logit_scaled(quantile(post$b_Intercept, 0.975))
+```
+
+## Incorporate Number of BINS collected in other orders
+
+
+For each Order in the BCI data, we divide the records into *Malaise* and *Others* (the other six sampling methods), and then:
+
+1.  **Compute** how many species are unique to *Others* — where “unique” means species captured only by the other methods, not by Malaise.
+
+2.  **Compute the proportion** = (# of unique species in *Others*) / (# of Malaise species).\
+    This proportion roughly represents the rate at which Malaise fails to capture species that could be obtained if all other six sampling methods were applied to our core data.\
+
+3.  **Adjust** our core data by multiplying the number of species in the core data by (1+ proportion).
+
+4.  **Repeat** this adjustment Order by Order for *all* Orders. This simple adjustment can be applied even to sparse Orders, so we need not worry about data sufficiency.
+
+5.  As a result, the total number of species (currently 53,945 in our core Malaise dataset) will increase somewhat, and the final estimate will inevitably be larger.
+
+```{r}
+
+## Compute how many species are unique to Others — 
+#where “unique” means species captured only by the other methods, not by Malaise.
+
+malaise_bins <- long_bin %>% 
+  filter(abundance > 0) %>% 
+  select(bin_uri, Order, trap_name) %>% 
+  unique() %>% 
+  filter(trap_name == 'Malaise trap')
+
+non_malaise_bins <- long_bin %>% 
+  filter(abundance > 0) %>% 
+  select(bin_uri, Order) %>% 
+  unique() %>% 
+  filter(!bin_uri %in% malaise_bins$bin_uri)
+
+unique_non_malaise <- non_malaise_bins %>% 
+  group_by(Order) %>% 
+  count()
+
+kable(unique_non_malaise)
+
+#Compute the proportion = (# of unique species in Others) / (# of Malaise species).
+
+n_total <- long_bin %>% 
+  filter(abundance > 0) %>% 
+  select(bin_uri, Order) %>% 
+  unique() %>% 
+  group_by(Order) %>% 
+  count() %>% 
+  rename(n_bins_total = n)
+
+ratio_unique_others <- malaise_bins %>% 
+  group_by(Order) %>% 
+  count() %>% 
+  rename(n_malaise_bins = n) %>% 
+  full_join(unique_non_malaise) %>% 
+  mutate(n = ifelse(is.na(n), 0, n)) %>% 
+  rename(n_unique_non_malaise = n) %>% 
+  mutate(n_malaise_bins = ifelse(is.na(n_malaise_bins), 0, n_malaise_bins)) %>% 
+  mutate(ratio = (n_unique_non_malaise/(n_malaise_bins))) %>% 
+  left_join(n_total) %>% 
+  select(n_bins_total, n_malaise_bins, n_unique_non_malaise, ratio) %>% 
+  arrange(Order) %>% 
+  mutate(ratio = ifelse(is.infinite(ratio), 0, ratio))
+
+kable(ratio_unique_others)
+
+#Adjust our core data by multiplying the 
+#number of species in the core data by (1+ proportion).
+
+Order_richness_core <- read_xlsx("../Data/Insect_Orders_count.xlsx") %>% 
+  rename(Order = order)
+
+adjusted_core <- ratio_unique_others %>% 
+  full_join(Order_richness_core) %>% 
+  arrange(Order) %>% 
+  mutate_if(is.numeric, coalesce, 0) %>% 
+  mutate(adjusted_richness = distinctBINs * (ratio+1)) %>% 
+  rename(Bins_ACG = distinctBINs) 
+
+kable(adjusted_core)
+
+sum(adjusted_core$adjusted_richness)
+
+```
+
+## Stability of the ratio (BCI-Unique-to-Other)/(BCI Malaise) by **rarefaction**
+
+\(1\) Choose one of the 50 **Malaise** samples, at random **without replacement.**  Keep its list of **N** species names (or codes) captured in the first column of an ***N*****-by-50** matrix called something like **Acccumulated Malaise.**
+
+\(2\) Choose one of the 50 **non-Malaise samples,** for **each of the 7** **non-Malaise** collection methods, at random **without replacement.**  Pool the 7 samples of species captured and place them in the firsrt column of an **N-by-50** matrix called something like **Acccumulated Non-Malaise.**
+
+\(3\) Compare the **Accumulated Malaise** with **Accumulated Non-Malaise** species lists and delete any **matches** from the **Non**-Malaise list, to create the first column of an ***N*****-by-50** matrix called something like **Accumulated Unique to Non-Malaise.**
+
+\(4\) **Repeat steps 1 to 3 (49 times)** until all 50 samples for all methods have been **accumulated**, placing the successive results in successive columns of the ***N*** by 50 matrices.  In other words, e.g. Column ***j*** is the list from Column ***(j – 1)*** with species new to step ***j*** added.
+
+\(5\) Plot the **species accumulation curves** for **Malaise** and **Unique-to-Non-Malaise** (the incidence total for their successive 50 columns).
+
+\(6\) Re-run the entire simulation 100 times, and plot the **mean** curves, to get smooth curves.
+
+```{r, fig.height = 5}
+
+## reshape and prepare the data
+long_sample <- BIN_table %>% 
+  mutate(Order = str_extract(classification, "o__[A-Z][a-z]*")) %>% 
+  mutate (Class = str_extract(classification, "c__[A-Z][a-z]*")) %>% 
+  filter(Class == "c__Insecta") %>% 
+  select(-classification, -total_count, -Class) %>% 
+  pivot_longer(values_to = "abundance", 
+               names_to = "sample", -c(bin_uri, Order)) %>% 
+  filter(abundance > 0) %>% 
+  left_join(select(metadata, sample, trap_name)) %>% 
+  mutate(Order = str_remove(Order, "o__")) 
+
+## step 1 
+
+malaise_samples_all <- long_sample %>% 
+  filter(trap_name == 'Malaise trap') %>% 
+  select(sample) %>% unique() %>% unlist()
+
+sample_all_malaise <- sample(malaise_samples_all, 50, replace = FALSE) 
+## choose 50 so replace = false works
+
+chosen_malaise_sample <- sample_all_malaise[1]
+
+species_in_malaise_chosen_sample <- long_sample %>% 
+  filter(sample == chosen_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+
+## step 2 
+
+##### update to sample for each sampling method. 
+
+# filter for non malaise traps
+non_malaise_samples_all <- long_sample %>% 
+  filter(trap_name != 'Malaise trap') %>% 
+  select(sample, trap_name) %>% unique() 
+
+# split samples by trap
+samples_by_type <- split(non_malaise_samples_all, non_malaise_samples_all$trap_name)
+
+# for each trap type sample without replacement
+sample_all_non_malaise <- lapply(samples_by_type, 
+                                 function(x) sample(x$sample, 50, replace = FALSE))
+## choose 50 so replace = false works
+
+# select the first sample for each trap method
+chosen_non_malaise_sample <- sapply(sample_all_non_malaise, FUN = function(x) x[1])
+
+chosen_non_malaise_sample
+
+species_in_non_malaise_chosen_sample <- long_sample %>% 
+  filter(sample %in% chosen_non_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+
+#Step 3 
+
+unique_non_malaise <- 
+  species_in_non_malaise_chosen_sample[!species_in_non_malaise_chosen_sample %in%
+                                         species_in_malaise_chosen_sample]
+
+## Step 4 
+
+malaise_bin <- data.frame(bin = species_in_malaise_chosen_sample, iter = 1)
+unique_non_malaise_bin <- data.frame(bin = unique_non_malaise, iter = 1)
+
+for(i in 2:50){
+  
+ # step 1
+
+chosen_malaise_sample <- sample_all_malaise[i]
+
+species_in_malaise_chosen_sample <- long_sample %>% 
+  filter(sample == chosen_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+  
+  malaise_bin <- bind_rows(malaise_bin, 
+                           data.frame(bin = species_in_malaise_chosen_sample, 
+                                      iter = i))
+  
+  # step 2
+  
+
+chosen_non_malaise_sample <- sapply(sample_all_non_malaise, FUN = function(x) x[i])
+
+species_in_non_malaise_chosen_sample <- long_sample %>% 
+  filter(sample %in% chosen_non_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+
+  # step 3  ## remove duplicate bins just added to Malaise
+  
+  unique_non_malaise <- 
+    species_in_non_malaise_chosen_sample[!species_in_non_malaise_chosen_sample 
+                                         %in% unique(malaise_bin$bin)]
+
+  unique_non_malaise_bin <- bind_rows(unique_non_malaise_bin, 
+                                      data.frame(bin = unique_non_malaise, 
+                                                 iter = i))
+}
+
+
+rownames(malaise_bin) <- NULL
+
+rownames(unique_non_malaise_bin) <- NULL
+
+### malaise accumulated richness 
+
+malaise_matrix <- malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+malaise_species_accumulation <-
+  specaccum(malaise_matrix, method = 'collector')
+
+malaise_accumulated_richness <-
+  malaise_species_accumulation$richness
+
+
+### unique non Malaise accumulated richness 
+
+unique_non_matrix <- unique_non_malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+unique_non_malaise_species_accumulation <- 
+  specaccum(unique_non_matrix, method = 'collector')
+
+unique_non_malaise_accumulated_richness <- 
+  unique_non_malaise_species_accumulation$richness
+
+bind_rows(data.frame(richness = malaise_accumulated_richness, 
+                     type = "Malaise", sample = 1:50), 
+          data.frame(richness = unique_non_malaise_accumulated_richness, 
+                     type = "Unique non Malaise", 
+                     sample = 1:50)) %>% 
+  ggplot(aes(x = sample, y = richness, color = type)) +
+  geom_point() +
+  geom_line() +
+  theme_cowplot() +ylab("Richness") + xlab("Sample") +
+  theme(legend.title = element_blank())
+
+
+data.frame(malaise_accumulated_richness, 
+           unique_non_malaise_accumulated_richness, sample = 1:50) %>% 
+  mutate(ratio = 
+           unique_non_malaise_accumulated_richness/malaise_accumulated_richness) %>% 
+  ggplot(aes(x = sample, y = ratio)) +
+  geom_point() +
+  geom_line()+
+  theme_cowplot() +ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample") 
+
+```
+
+Now run 100 times
+
+```{r fig.height = 5}
+#step 6 repeat 100 times
+
+accummulated_malaise <- matrix(NA, nrow = 50, ncol = 100)
+accumulated_unique_non_malaise <- matrix(NA, nrow = 50, ncol = 100)
+
+
+for(n in 1:100){
+  
+  malaise_bin <- data.frame()
+
+  unique_non_malaise_bin <- data.frame()
+  
+  ## sample samples
+  
+  sample_all_malaise <- sample(malaise_samples_all, 50, replace = FALSE) 
+  
+  
+  # split samples by trap
+samples_by_type <- split(non_malaise_samples_all, 
+                         non_malaise_samples_all$trap_name)
+
+# for each trap type sample without replacement
+sample_all_non_malaise <- lapply(samples_by_type, 
+                                 function(x) sample(x$sample, 50, replace = FALSE))
+## choose 50 so replace = false works
+  
+  ## steps 1-4
+  
+  for(i in 1:50){
+  
+ # step 1
+
+chosen_malaise_sample <- sample_all_malaise[i]
+
+species_in_malaise_chosen_sample <- long_sample %>% 
+  filter(sample == chosen_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+  
+  malaise_bin <- bind_rows(malaise_bin, 
+                           data.frame(bin = species_in_malaise_chosen_sample, 
+                                      iter = i))
+  
+  # step 2
+  # select the first sample for each trap method
+chosen_non_malaise_sample <- sapply(sample_all_non_malaise, FUN = function(x) x[i])
+
+species_in_non_malaise_chosen_sample <- long_sample %>% 
+  filter(sample %in% chosen_non_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+
+  # step 3 
+  
+  unique_non_malaise <- 
+    species_in_non_malaise_chosen_sample[!species_in_non_malaise_chosen_sample 
+                                         %in% unique(malaise_bin$bin)]
+  if(length(unique_non_malaise) != 0){ 
+    
+    ## check that unique_non_malaise is not empty
+    
+    unique_non_malaise_bin <- bind_rows(unique_non_malaise_bin, 
+                                      data.frame(bin = unique_non_malaise, 
+                                                 iter = i))
+  }else{
+    ## if its empty, add the last bin of the previous iteration just to make sure there are not fewer iterations, and ultimately no species will get accumulated 
+    unique_non_malaise_bin <- 
+      bind_rows(unique_non_malaise_bin, 
+                data.frame(bin = 
+                             unique_non_malaise_bin$bin[nrow(unique_non_malaise_bin)],
+                                                 iter = i))
+    
+  }
+  
+}
+  
+### get the accumulation
+    
+rownames(malaise_bin) <- NULL
+
+rownames(unique_non_malaise_bin) <- NULL
+
+### malaise accumulated richness 
+
+malaise_matrix <- malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+malaise_species_accumulation <- 
+  specaccum(malaise_matrix, method = 'collector')
+
+malaise_accumulated_richness <- 
+  malaise_species_accumulation$richness
+
+
+### unique non Malaise accumulated richness 
+
+unique_non_matrix <- unique_non_malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+unique_non_malaise_species_accumulation <- 
+  specaccum(unique_non_matrix, method = 'collector')
+
+unique_non_malaise_accumulated_richness <- 
+  unique_non_malaise_species_accumulation$richness
+  
+  ## store results
+  
+accummulated_malaise[,n] <- malaise_accumulated_richness
+accumulated_unique_non_malaise[,n] <- unique_non_malaise_accumulated_richness
+
+}
+```
+
+Add plots
+
+```{r fig.height = 5}
+
+## mean accumulation curves
+
+malaise_mean <- apply(accummulated_malaise, 1, 
+                      FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                                  quantile(x, 0.975)))
+
+unique_non_malaise_mean <- apply(accumulated_unique_non_malaise, 1, 
+                                 FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                                  quantile(x, 0.975)))
+
+
+
+sample_size <- 50
+
+sample_malaise_non_malaise_fig <- bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:sample_size), 
+                                            data.frame(t(unique_non_malaise_mean), 
+                                                       type = "Unique non Malaise", sample = 1:sample_size)) %>%
+  ggplot() +
+  geom_line(aes(x = sample, y = V1, color = type)) +
+  geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`, fill = type), alpha = 0.2) +
+  theme_cowplot() +
+  ylab("Richness") + xlab("Sample") +
+  theme(legend.title = element_blank()) +
+  theme(legend.position = c(0.05, 0.9))
+
+### mean ratio 
+
+ratio_mean <- apply(accumulated_unique_non_malaise/accummulated_malaise, 1, 
+                    FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                       quantile(x, 0.975)))
+
+
+ratio_sample_all_fig <- data.frame(t(ratio_mean), sample = 1:sample_size) %>% 
+  ggplot() +
+  geom_line(aes(x = sample, y = V1)) +
+  geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`), alpha = 0.2) +
+  theme_cowplot() +
+  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample") +
+  scale_y_continuous(limits = c(0, 6.5))
+
+combined_saturation_ratio <- plot_grid(sample_malaise_non_malaise_fig, ratio_sample_all_fig)
+
+combined_saturation_ratio
+
+ggsave(combined_saturation_ratio, 
+       filename = paste0("../Figures/combined_saturation_ratio",sample_size,".jpeg"), width = 10, height = 8)
+
+
+## add the one sample result 
+
+one_sample <-data.frame(malaise_accumulated_richness, 
+                        unique_non_malaise_accumulated_richness, sample = 1:50) %>% 
+  mutate(ratio = unique_non_malaise_accumulated_richness/malaise_accumulated_richness)
+
+data.frame(t(ratio_mean), sample = 1:50) %>% 
+  ggplot() +
+  geom_line(aes(x = sample, y = V1)) +
+  geom_line(data = one_sample, aes(x = sample, y = ratio)) +
+  geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`), alpha = 0.2) +
+  theme_cowplot() +
+  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample")
+
+t(ratio_mean)
+```
+
+Suppose the BCI study had run two Malaise traps in each of the 50 sampling plots (instead of one), or ran the one trap per sampling unit for twice as many days. To a rough approximation, that would be equivalent to adding two Malaise samples for each Unique-to-Non-Malaise samples in the simulations. That would move the red curves to the left and reduce the ratio. 
+
+```{r message=FALSE}
+#step 6 repeat 100 times
+
+accummulated_malaise <- matrix(NA, nrow = 25, ncol = 100)
+accumulated_unique_non_malaise <- matrix(NA, nrow = 25, ncol = 100)
+
+orders <- sort(unique(long_sample$Order))
+accumulated_unique_non_malaise_order <- matrix(NA, ncol = 100, nrow = length(orders))
+
+
+for(n in 1:100){
+  
+  malaise_bin <- data.frame()
+
+  unique_non_malaise_bin <- data.frame()
+  
+  ## sample samples
+  
+  sample_all_malaise <- sample(malaise_samples_all, 50, replace = FALSE) 
+  
+  # split samples by trap
+samples_by_type <- split(non_malaise_samples_all, non_malaise_samples_all$trap_name)
+
+# for each trap type sample without replacement
+sample_all_non_malaise <- lapply(samples_by_type, 
+                                 function(x) sample(x$sample, 50, replace = FALSE))
+  
+  ## steps 1-4
+  
+  for(i in 1:25){
+  
+ # step 1
+
+chosen_malaise_sample <- sample_all_malaise[c(i, i+25)]
+
+species_in_malaise_chosen_sample <- long_sample %>% 
+  filter(sample %in% chosen_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+  
+  malaise_bin <- bind_rows(malaise_bin, 
+                           data.frame(bin = species_in_malaise_chosen_sample, 
+                                      iter = i))
+  
+  # step 2
+  
+
+chosen_non_malaise_sample <- sapply(sample_all_non_malaise, FUN = function(x) x[i])
+
+species_in_non_malaise_chosen_sample <- long_sample %>% 
+  filter(sample %in% chosen_non_malaise_sample) %>% 
+  select(bin_uri) %>% unique() %>% unlist()
+
+  # step 3 
+  
+  unique_non_malaise <- 
+    species_in_non_malaise_chosen_sample[!species_in_non_malaise_chosen_sample 
+                                         %in% unique(malaise_bin$bin)]
+
+  if(length(unique_non_malaise) != 0){ 
+    
+    ## check that unique_non_malaise is not empty
+    
+    unique_non_malaise_bin <- bind_rows(unique_non_malaise_bin, 
+                                      data.frame(bin = unique_non_malaise, 
+                                                 iter = i))
+  }else{
+    ## if its empty, add the last bin of the previous 
+    #iteration just to make sure there are not fewer iterations, 
+    #and ultimately no species will get accumulated 
+    unique_non_malaise_bin <- 
+      bind_rows(unique_non_malaise_bin, 
+                data.frame(bin = unique_non_malaise_bin$bin[nrow(unique_non_malaise_bin)],
+                                                 iter = i))
+    
+  }
+  
+}
+  
+### get the accumulation
+    
+rownames(malaise_bin) <- NULL
+
+rownames(unique_non_malaise_bin) <- NULL
+
+### malaise accumulated richness 
+
+malaise_matrix <- malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+malaise_species_accumulation <- 
+  specaccum(malaise_matrix, method = 'collector')
+
+malaise_accumulated_richness <- 
+  malaise_species_accumulation$richness
+
+
+### unique non Malaise accumulated richness 
+
+unique_non_matrix <- unique_non_malaise_bin %>% 
+  mutate(present = 1) %>% 
+  pivot_wider(names_from = iter, values_from = present, values_fill = 0) %>% 
+  tibble::column_to_rownames("bin") %>% 
+  t()
+
+unique_non_malaise_species_accumulation <- 
+  specaccum(unique_non_matrix, method = 'collector')
+
+unique_non_malaise_accumulated_richness <- 
+  unique_non_malaise_species_accumulation$richness
+  
+## by order 
+
+bin_order <- long_sample %>% 
+  select(bin_uri, Order) %>% 
+  unique() %>% rename(bin = bin_uri)
+
+unique_non_malaise_order <- unique_non_malaise_bin %>% 
+  mutate(present = 1) %>% 
+  left_join(bin_order) 
+
+total_bins_order <- unique_non_malaise_order %>% 
+  select(bin, Order) %>% 
+  unique() %>% 
+  group_by(Order) %>% 
+  count() %>% 
+  ungroup() %>% 
+  full_join(data.frame(Order = orders)) %>% 
+  mutate(n = ifelse(is.na(n), 0, n)) %>% 
+  arrange(Order)
+
+
+accumulated_unique_non_malaise_order[,n] <- total_bins_order$n
+
+  ## store results
+  
+accummulated_malaise[,n] <- malaise_accumulated_richness
+accumulated_unique_non_malaise[,n] <- unique_non_malaise_accumulated_richness
+
+}
+
+
+```
+
+Add plots
+
+```{r}
+
+## mean accumulation curves
+
+malaise_mean <- apply(accummulated_malaise, 1, 
+                      FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                                  quantile(x, 0.975)))
+
+unique_non_malaise_mean <- apply(accumulated_unique_non_malaise, 1, 
+                                 FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                                  quantile(x, 0.975)))
+
+
+
+sample_size <- 25
+
+sample_malaise_non_malaise_fig <- bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:sample_size), 
+                                            data.frame(t(unique_non_malaise_mean), 
+                                                       type = "Unique non Malaise", sample = 1:sample_size)) %>%
+  ggplot() +
+  geom_line(aes(x = sample, y = V1, color = type)) +
+  geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`, fill = type), alpha = 0.2) +
+  theme_cowplot() +
+  ylab("Richness") + xlab("Sample") +
+  theme(legend.title = element_blank()) +
+  theme(legend.position = c(0.05, 0.9))
+
+### mean ratio 
+
+ratio_mean <- apply(accumulated_unique_non_malaise/accummulated_malaise, 1, 
+                    FUN= function(x) c(mean(x), quantile(x, 0.025),
+                                       quantile(x, 0.975)))
+
+
+ratio_sample_all_fig <- data.frame(t(ratio_mean), sample = 1:sample_size) %>% 
+  ggplot() +
+  geom_line(aes(x = sample, y = V1)) +
+  geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`), alpha = 0.2) +
+  theme_cowplot() +
+  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample") +
+  scale_y_continuous(limits = c(0, 6.5))
+
+combined_saturation_ratio <- plot_grid(sample_malaise_non_malaise_fig, ratio_sample_all_fig)
+
+combined_saturation_ratio
+
+ggsave(combined_saturation_ratio, 
+       filename = paste0("../Figures/combined_saturation_ratio",sample_size,".jpeg"), width = 10, height = 8)
+t(ratio_mean)
+
+```
+
+## Calculate the average unique non Malaise richness by order 
+
+```{r}
+
+rownames(accumulated_unique_non_malaise_order) <- orders
+
+apply(accumulated_unique_non_malaise_order, 1, FUN = 
+         function(x) c(mean(x), quantile(x, 0.025), quantile(x, 0.975))) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rename(mean_final_total_bins = V1)
+
+```
+

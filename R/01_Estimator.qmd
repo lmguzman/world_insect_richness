@@ -217,7 +217,6 @@ CI_total_insect_world
 
 ```
 
-
 ## An alternative estimate
 
 ```{r}

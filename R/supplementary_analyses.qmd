@@ -1,0 +1,323 @@
+---
+title: "Supplementary analyses"
+format: pdf
+editor: visual
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+---
+
+## Table S1
+
+Using the Macrogastrinae benchmark to estimate ACG and global Braconidae, Ichneumonoidea, and Hymenoptera (following the same approach we have used for Insecta). We have added Table S1 to present these estimates, which we discuss briefly in the Main Text.
+
+```{r, message=FALSE}
+library(SpadeR)
+library(dplyr)
+library(stringr)
+library(pairwiseCI)
+#library(remotes)
+#install_version("CARE1", "1.1.0")
+library(CARE1)
+
+## Load Data 
+
+#Microgastrinae 
+
+reared <- read.csv("../Data/Microgastrinae ACG Reared.csv") %>% 
+  select(BOLD.code, Frequency)
+
+core <- read.csv("../Data/Microgastrinae ACG Core Malaise.csv") %>% 
+  select(BOLD.code, Frequency)
+
+peri <- read.csv("../Data/Microgastrinae ACG Peripheral Malaise.csv") %>% 
+  select(BOLD.code, Frequency)
+
+# All insecta core
+
+insc <- read.csv("../Data/Insecta ACG Core Malaise.csv") %>%
+  select(BOLD.code, Frequency)
+
+#Braconidae
+
+Brac <- read.csv("../Data/Braconidae ACG Core Malaise.csv") %>%
+  select(BOLD.code= BOLD.Code, Frequency)
+
+#Ichneumonoidea
+
+Ichn <- read.csv("../Data/Ichneumonoidea ACG Core Malaise.csv") %>%
+  select(BOLD.code, Frequency)
+
+#Hymenoptera
+
+hym <- read.csv("../Data/Hymenoptera ACG Core Malaise.csv") %>% 
+  select(BOLD.code= BOLD.Code, Frequency)
+
+## highlight estimator
+
+estimator <- "    iChao1 (Chiu et al. 2014)"
+
+## adding in the trees
+
+#TA = number of tree species in ACG
+TA <- 1500
+TA_alt <- 1200
+
+#Tc = number of tree species in CR
+
+TC <- 2500
+#Tw = number of tree species on Earth
+
+## estimated tree species
+
+TW <- 73274
+TW_CI <- c(73271, 73276)
+
+TW_2 <- 89147
+
+## described number of tree species 
+
+TW_d <- 60065
+
+### Number of Saturniid moths
+
+SA <- 106
+SW <- 4535
+
+```
+
+# Approach 1: Calculate insect richness worldwide using the CARE estimator for Microgastrinae
+
+```{r}
+### Total number of BINS
+
+reared %>% nrow()
+
+core %>% nrow()
+
+peri %>% nrow()
+
+###
+```
+
+## Step 1: Combining Malaise and Reared samples of Microgastrinae and estimating the true richness of ACG Microgastrinae
+
+```{r}
+
+full_micro_table <- reared %>% 
+  rename(reared = Frequency) %>% 
+  full_join(rename(core, core = Frequency)) %>% 
+  full_join(rename(peri, peri = Frequency)) %>% 
+  mutate(reared = ifelse(is.na(reared), 0, 1)) %>% 
+  mutate(core = ifelse(is.na(core), 0, 1)) %>% 
+  mutate(peri = ifelse(is.na(peri), 0, 1))
+
+head(full_micro_table)
+
+nrow(full_micro_table)
+
+# Transform observed ../Data to CARE1 input format
+micro_care <- as.record(full_micro_table[,-1])
+
+micro_care
+
+# Main step to obtain population size estimates
+CARE1.print(micro_care)
+
+# Print the CARE1 input format
+
+## n1 = reared = 886
+## n2 = core = 388
+## n3 = peripheral = 576
+
+## Using Nhat-1
+
+Nhat1 <- round(estN(micro_care, method = "LSC", se = TRUE, nboot = 200))
+
+micro_all_estimate <- Nhat1[1]
+micro_all_CI <- c(Nhat1[3], Nhat1[4])
+```
+
+## Step 2. Estimating the undersampling ratio for Core Microgastrinae.
+
+```{r}
+## proportion of core malaise of the ichao total 
+
+proportion_core <- nrow(core)/micro_all_estimate
+
+proportion_core
+
+CI_proportion_core <- nrow(core)/micro_all_CI
+
+CI_proportion_core
+```
+
+## Step 3 Calculate total number of insects in ACG
+
+```{r}
+## Total number of insecta bins in ACG core malaise
+n_insects_core <- nrow(insc)
+
+n_insects_core
+
+## Total number of Braconidae bins in ACG core malaise
+n_brac_core <- nrow(Brac)
+
+n_brac_core
+
+## Total number of Ichneumonoidea bins in ACG core malaise
+n_ichn_core <- nrow(Ichn)
+
+n_ichn_core
+
+## Total number of hymenoptera bins in ACG core malaise
+n_hym_core <- nrow(hym)
+
+n_hym_core
+
+```
+
+```{r}
+
+## insecta 
+total_insec_acg <- n_insects_core*(1/proportion_core)
+
+total_insec_acg
+
+CI_total_insect_acg <- n_insects_core*(1/round(CI_proportion_core,3))
+
+n_insects_core*(1/round(CI_proportion_core,3))
+
+n_insects_core*(1/CI_proportion_core)
+
+CI_total_insect_acg
+
+
+## Braconidae 
+total_brac_acg <- n_brac_core*(1/proportion_core)
+
+total_brac_acg
+
+CI_total_brac_acg <- n_brac_core*(1/round(CI_proportion_core,3))
+
+n_brac_core*(1/round(CI_proportion_core,3))
+
+n_brac_core*(1/CI_proportion_core)
+
+CI_total_brac_acg
+
+## Ichneumonoidea  
+total_ichn_acg <- n_ichn_core*(1/proportion_core)
+
+total_ichn_acg
+
+CI_total_ichn_acg <- n_ichn_core*(1/round(CI_proportion_core,3))
+
+n_ichn_core*(1/round(CI_proportion_core,3))
+
+n_ichn_core*(1/CI_proportion_core)
+
+CI_total_ichn_acg
+
+## Hymenoptera 
+total_hym_acg <- n_hym_core*(1/proportion_core)
+
+total_hym_acg
+
+CI_total_hym_acg <- n_hym_core*(1/round(CI_proportion_core,3))
+
+n_hym_core*(1/round(CI_proportion_core,3))
+
+n_hym_core*(1/CI_proportion_core)
+
+CI_total_hym_acg
+
+## compile results
+
+compiled_results <- data.frame(Taxonomic_group = c('Insecta', "Hymenoptera", 
+                                                   "Ichneumonoidea", "Braconidae"),
+                               total_core = c(n_insects_core, n_hym_core, 
+                                              n_ichn_core, n_brac_core),
+                               total_acg = c(total_insec_acg, total_hym_acg,
+                                            total_ichn_acg, total_brac_acg),
+                               CI_low = c(CI_total_insect_acg[1],
+                                          CI_total_hym_acg[1],
+                                          CI_total_ichn_acg[1],
+                                          CI_total_brac_acg[1]),
+                               CI_high = c(CI_total_insect_acg[2],
+                                          CI_total_hym_acg[2],
+                                          CI_total_ichn_acg[2],
+                                          CI_total_brac_acg[2]))
+
+compiled_results
+```
+
+## Step 4. Estimating global insect richness – based on trees
+
+```{r}
+
+##### Total insects 
+
+print("Total world insects based on estimated tree richness")
+
+total_insect_world <- (TW*total_insec_acg)/TA 
+total_insect_world
+
+CI_total_insect_world <- (TW*CI_total_insect_acg)/TA 
+
+CI_total_insect_world
+
+
+##### Total Hymenoptera 
+
+print("Total world insects based on estimated tree richness")
+
+total_hym_world <- (TW*total_hym_acg)/TA 
+total_hym_world
+
+CI_total_hym_world <- (TW*CI_total_hym_acg)/TA 
+
+CI_total_hym_world
+
+
+##### Total Ichneumonoidea
+
+print("Total world insects based on estimated tree richness")
+
+total_ichn_world <- (TW*total_ichn_acg)/TA 
+total_ichn_world
+
+CI_total_ichn_world <- (TW*CI_total_ichn_acg)/TA 
+
+CI_total_ichn_world
+
+
+##### Total Braconidae 
+
+print("Total world insects based on estimated tree richness")
+
+total_brac_world <- (TW*total_brac_acg)/TA 
+total_brac_world
+
+CI_total_brac_world <- (TW*CI_total_brac_acg)/TA 
+
+CI_total_brac_world
+
+## compile results
+
+compiled_results_all <- bind_cols(compiled_results, 
+                                  data.frame(total_word = 
+                                               c(total_insect_world,
+                                                 total_hym_world,
+                                                 total_ichn_world,
+                                                 total_brac_world),
+                                             CI_w_low = c(CI_total_insect_world[1],
+                                                          CI_total_hym_world[1],
+                                                          CI_total_ichn_world[1],
+                                                          CI_total_brac_world[1]),
+                                             CI_w_high = c(CI_total_insect_world[2],
+                                                          CI_total_hym_world[2],
+                                                          CI_total_ichn_world[2],
+                                                          CI_total_brac_world[2])))
+
+compiled_results_all
+
+```
