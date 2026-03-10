@@ -27,7 +27,7 @@ library(purrr)
 
 ## Get data from DanielSoutoV et al.
 
-Data downloaded from: https://doi.org/10.5281/zenodo.16586355
+Data downloaded from: https://doi.org/10.5281/zenodo.16586355 (data not included in repository)
 
 Load the data and the site metadata
 
@@ -78,7 +78,7 @@ percentage_count  <- order_counts %>%
 
 percentage_count
 
-write.csv(percentage_count, "../summary_percent_malaise.csv", row.names = FALSE)
+write.csv(percentage_count, file = "../Data/summary_percent_malaise.csv", row.names = FALSE)
 ```
 
 ## Multi-level model to estimate probability of malaise catchability overall and by order
@@ -166,7 +166,6 @@ inv_logit_scaled(quantile(post$b_Intercept, 0.975))
 
 ## Incorporate Number of BINS collected in other orders
 
-
 For each Order in the BCI data, we divide the records into *Malaise* and *Others* (the other six sampling methods), and then:
 
 1.  **Compute** how many species are unique to *Others* — where “unique” means species captured only by the other methods, not by Malaise.
@@ -236,11 +235,8 @@ Order_richness_core <- read_xlsx("../Data/Insect_Orders_count.xlsx") %>%
   rename(Order = order)
 
 adjusted_core <- ratio_unique_others %>% 
-  full_join(Order_richness_core) %>% 
-  arrange(Order) %>% 
-  mutate_if(is.numeric, coalesce, 0) %>% 
-  mutate(adjusted_richness = distinctBINs * (ratio+1)) %>% 
-  rename(Bins_ACG = distinctBINs) 
+  left_join(Order_richness_core) %>% 
+  mutate(adjusted_richness = distinctBINs * (ratio+1))
 
 kable(adjusted_core)
 
@@ -256,7 +252,7 @@ sum(adjusted_core$adjusted_richness)
 
 \(3\) Compare the **Accumulated Malaise** with **Accumulated Non-Malaise** species lists and delete any **matches** from the **Non**-Malaise list, to create the first column of an ***N*****-by-50** matrix called something like **Accumulated Unique to Non-Malaise.**
 
-\(4\) **Repeat steps 1 to 3 (49 times)** until all 50 samples for all methods have been **accumulated**, placing the successive results in successive columns of the ***N*** by 50 matrices.  In other words, e.g. Column ***j*** is the list from Column ***(j – 1)*** with species new to step ***j*** added.
+(4) **Repeat steps 1 to 3 (49 times)** until all 50 samples for all methods have been **accumulated**, placing the successive results in successive columns of the ***N*** by 50 matrices.  In other words, e.g. Column ***j*** is the list from Column ***(j – 1)*** with species new to step ***j*** added.
 
 \(5\) Plot the **species accumulation curves** for **Malaise** and **Unique-to-Non-Malaise** (the incidence total for their successive 50 columns).
 
@@ -382,7 +378,7 @@ malaise_accumulated_richness <-
   malaise_species_accumulation$richness
 
 
-### unique non Malaise accumulated richness 
+### unique non malaise accumulated richness 
 
 unique_non_matrix <- unique_non_malaise_bin %>% 
   mutate(present = 1) %>% 
@@ -399,7 +395,7 @@ unique_non_malaise_accumulated_richness <-
 bind_rows(data.frame(richness = malaise_accumulated_richness, 
                      type = "Malaise", sample = 1:50), 
           data.frame(richness = unique_non_malaise_accumulated_richness, 
-                     type = "Unique non Malaise", 
+                     type = "Unique non malaise", 
                      sample = 1:50)) %>% 
   ggplot(aes(x = sample, y = richness, color = type)) +
   geom_point() +
@@ -517,7 +513,7 @@ malaise_accumulated_richness <-
   malaise_species_accumulation$richness
 
 
-### unique non Malaise accumulated richness 
+### unique non malaise accumulated richness 
 
 unique_non_matrix <- unique_non_malaise_bin %>% 
   mutate(present = 1) %>% 
@@ -555,41 +551,39 @@ unique_non_malaise_mean <- apply(accumulated_unique_non_malaise, 1,
 
 
 
-sample_size <- 50
-
-sample_malaise_non_malaise_fig <- bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:sample_size), 
-                                            data.frame(t(unique_non_malaise_mean), 
-                                                       type = "Unique non Malaise", sample = 1:sample_size)) %>%
+sample_malaise_non_malaise_fig <- bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:50), 
+          data.frame(t(unique_non_malaise_mean), 
+                     type = "Unique non malaise", sample = 1:50)) %>%
   ggplot() +
   geom_line(aes(x = sample, y = V1, color = type)) +
   geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`, fill = type), alpha = 0.2) +
   theme_cowplot() +
   ylab("Richness") + xlab("Sample") +
-  theme(legend.title = element_blank()) +
-  theme(legend.position = c(0.05, 0.9))
+  theme(legend.title = element_blank())
+  
+
+sample_malaise_non_malaise_fig
+
+ggsave(sample_malaise_non_malaise_fig, 
+       filename = "../Figures/sample_malaise_unique_comparison.jpeg")
 
 ### mean ratio 
 
 ratio_mean <- apply(accumulated_unique_non_malaise/accummulated_malaise, 1, 
                     FUN= function(x) c(mean(x), quantile(x, 0.025),
-                                       quantile(x, 0.975)))
+                                                  quantile(x, 0.975)))
 
 
-ratio_sample_all_fig <- data.frame(t(ratio_mean), sample = 1:sample_size) %>% 
+ratio_sample_all_fig <- data.frame(t(ratio_mean), sample = 1:50) %>% 
   ggplot() +
   geom_line(aes(x = sample, y = V1)) +
   geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`), alpha = 0.2) +
   theme_cowplot() +
-  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample") +
-  scale_y_continuous(limits = c(0, 6.5))
+  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample")
 
-combined_saturation_ratio <- plot_grid(sample_malaise_non_malaise_fig, ratio_sample_all_fig)
+ratio_sample_all_fig
 
-combined_saturation_ratio
-
-ggsave(combined_saturation_ratio, 
-       filename = paste0("../Figures/combined_saturation_ratio",sample_size,".jpeg"), width = 10, height = 8)
-
+ggsave(ratio_sample_all_fig, filename = "../Figures/ratio_sampling_all.jpeg")
 
 ## add the one sample result 
 
@@ -608,7 +602,7 @@ data.frame(t(ratio_mean), sample = 1:50) %>%
 t(ratio_mean)
 ```
 
-Suppose the BCI study had run two Malaise traps in each of the 50 sampling plots (instead of one), or ran the one trap per sampling unit for twice as many days. To a rough approximation, that would be equivalent to adding two Malaise samples for each Unique-to-Non-Malaise samples in the simulations. That would move the red curves to the left and reduce the ratio. 
+Suppose the BCI study had run two Malaise traps in each of the 50 sampling plots (instead of one), or ran the one trap per sampling unit for twice as many days. To a rough approximation, that would be equivalent to adding two Malaise samples for each Unique-to-Non-Malaise samples in the simulations. That would move the red curves to the left and reduce the ratio.
 
 ```{r message=FALSE}
 #step 6 repeat 100 times
@@ -709,7 +703,7 @@ malaise_accumulated_richness <-
   malaise_species_accumulation$richness
 
 
-### unique non Malaise accumulated richness 
+### unique non malaise accumulated richness 
 
 unique_non_matrix <- unique_non_malaise_bin %>% 
   mutate(present = 1) %>% 
@@ -772,45 +766,36 @@ unique_non_malaise_mean <- apply(accumulated_unique_non_malaise, 1,
 
 
 
-sample_size <- 25
-
-sample_malaise_non_malaise_fig <- bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:sample_size), 
-                                            data.frame(t(unique_non_malaise_mean), 
-                                                       type = "Unique non Malaise", sample = 1:sample_size)) %>%
+bind_rows(data.frame(t(malaise_mean), type = "Malaise", sample = 1:25), 
+          data.frame(t(unique_non_malaise_mean), 
+                     type = "Unique non malaise", sample = 1:25)) %>%
   ggplot() +
   geom_line(aes(x = sample, y = V1, color = type)) +
   geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`, fill = type), alpha = 0.2) +
   theme_cowplot() +
   ylab("Richness") + xlab("Sample") +
-  theme(legend.title = element_blank()) +
-  theme(legend.position = c(0.05, 0.9))
+  theme(legend.title = element_blank())
+  
 
 ### mean ratio 
 
 ratio_mean <- apply(accumulated_unique_non_malaise/accummulated_malaise, 1, 
                     FUN= function(x) c(mean(x), quantile(x, 0.025),
-                                       quantile(x, 0.975)))
+                                                  quantile(x, 0.975)))
 
 
-ratio_sample_all_fig <- data.frame(t(ratio_mean), sample = 1:sample_size) %>% 
+data.frame(t(ratio_mean), sample = 1:25) %>% 
   ggplot() +
   geom_line(aes(x = sample, y = V1)) +
   geom_ribbon(aes(x = sample, ymin = `X2.5.`, ymax = `X97.5.`), alpha = 0.2) +
   theme_cowplot() +
-  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample") +
-  scale_y_continuous(limits = c(0, 6.5))
+  ylab("Ratio: Unique non-Malaise / Malaise") + xlab("Sample")
 
-combined_saturation_ratio <- plot_grid(sample_malaise_non_malaise_fig, ratio_sample_all_fig)
-
-combined_saturation_ratio
-
-ggsave(combined_saturation_ratio, 
-       filename = paste0("../Figures/combined_saturation_ratio",sample_size,".jpeg"), width = 10, height = 8)
 t(ratio_mean)
 
 ```
 
-## Calculate the average unique non Malaise richness by order 
+## Calculate the average unique non malaise richness by order
 
 ```{r}
 
@@ -823,4 +808,3 @@ apply(accumulated_unique_non_malaise_order, 1, FUN =
   rename(mean_final_total_bins = V1)
 
 ```
-

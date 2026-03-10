@@ -4,9 +4,8 @@ library(tidyverse)
 library(VennDiagram)
 library(dplyr)
 
-setwd("~/Desktop")
+Data=read.delim(file = "Data/raw/CR_all_rec_report_output.tsv", sep = '\t')
 
-Data=read.delim(file = "CR_all_rec_report_output.tsv", sep = '\t')
 
 ###count full ACG
 allACG_1=Data%>%
@@ -72,7 +71,7 @@ reared_count = query_reared %>%
   summarize(count = n()) %>%
   ungroup()
 
-write.csv(allACG_M,"Microgastrines_forTree.csv")
+write.csv(allACG_M,"Data/Microgastrines_forTree.csv")
 
 ###count Malaise BINs in ACG
 
@@ -93,7 +92,7 @@ allMalaise_count_richness = allMalaise_count %>%
   complete(count=1:748,fill = list(n= 0))
 allMalaise_count_richness =as.data.frame(allMalaise_count_richness)
 
-write.csv(reared_count,"Micrograstrinae_AGCAllNov2024.csv")
+write.csv(reared_count,"Data/Micrograstrinae_AGCAllNov2024.csv")
   
 ##Filter Core ACG (Traps that have been completely processed)
 query_coreACG = Data%>%
@@ -160,7 +159,7 @@ overlap_reared=peripherie_count%>%
 overlap_malaise=reared_count%>%
   inner_join(allMalaise_count, by="uri")
 
-write.csv(peripherie_count,"Micrograstrinae_AGCPeripherieNov2024.csv")
+write.csv(peripherie_count,"Data/Micrograstrinae_AGCPeripherieNov2024.csv")
 
   
 ##Bar chart displaying BINs per taxon  
@@ -189,25 +188,25 @@ ggplot(coreACGBIN_count,aes(x=reorder(order, -distinctBINs), y=distinctBINs, col
   
 
 ##overlap reared ACG and malaise ACG
-query_reared_single = query_reared%>%
-  distinct(uri, .keep_all = TRUE)
-
-ovl_2=
-  query_reared_single%>%
-  inner_join(AllACG3, by="uri")
-
-perct_all=nrow(ovl_2)/nrow(query_reared_single)
-estimate_all=nrow(query_reared_single)/perct_all
-
-
-#empty plot cache (repeat every time before plotting a diagram)
-while (dev.cur()>1) dev.off()
-
-#draw pairwise Venn diagram (for category attribute, any label can be used)
-draw.pairwise.venn(
-  area1=round(av_tes1),
-  area2=round(av_tes2),
-  cross.area = round(av_over),
-  category=c("sample 1","sample 2"),
-  fill=c("red","green"),
-  cex=c(3,3,3))
+# query_reared_single = query_reared%>%
+#   distinct(uri, .keep_all = TRUE)
+# 
+# ovl_2=
+#   query_reared_single%>%
+#   inner_join(AllACG3, by="uri")
+# 
+# perct_all=nrow(ovl_2)/nrow(query_reared_single)
+# estimate_all=nrow(query_reared_single)/perct_all
+# 
+# 
+# #empty plot cache (repeat every time before plotting a diagram)
+# while (dev.cur()>1) dev.off()
+# 
+# #draw pairwise Venn diagram (for category attribute, any label can be used)
+# draw.pairwise.venn(
+#   area1=round(av_tes1),
+#   area2=round(av_tes2),
+#   cross.area = round(av_over),
+#   category=c("sample 1","sample 2"),
+#   fill=c("red","green"),
+#   cex=c(3,3,3))

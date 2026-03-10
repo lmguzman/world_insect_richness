@@ -101,6 +101,8 @@ micro_care <- as.record(full_micro_table[,-1])
 
 micro_care
 
+set.seed(100)
+
 # Main step to obtain population size estimates
 CARE1.print(micro_care)
 
@@ -146,9 +148,9 @@ total_insec_acg <- n_insects_core*(1/proportion_core)
 
 total_insec_acg
 
-CI_total_insect_acg <- n_insects_core*(1/round(CI_proportion_core,3))
+CI_total_insect_acg <- n_insects_core*(1/CI_proportion_core)
 
-n_insects_core*(1/round(CI_proportion_core,3))
+n_insects_core*(1/CI_proportion_core)
 
 n_insects_core*(1/CI_proportion_core)
 
@@ -245,4 +247,3 @@ CI_total_insect_world <- (TW_2*CI_total_insect_acg)/TA_alt
 CI_total_insect_world
 
 ```
-

@@ -5,12 +5,13 @@ library(dplyr)
 library(ggspatial)
 #remotes::install_github("wmgeolab/rgeoboundaries")
 library(rgeoboundaries)
+library(tidyr)
+library(stringr)
+library(units)
 
 ### read in points
 
 malaise <- read.csv('Data/locations/Locations for map Figure 1.csv')
-
-#malaise_dan <- read.csv("Data/locations/Janzen Costa Rica full table Malaise_20241121/Sheet1-Table 1.csv")
 
 ## comment from Dirk: one set of lat/lon needs to be replaced for CRI|NO02_527|MBT1: 10.92, -85.72 – the data I provided initially was based on wrong information.
 
@@ -117,3 +118,161 @@ acg_all_final <- acg_all +
 
 ggsave(acg_all_final, filename = 'Figures/Figure1.jpeg') 
 
+
+#### Box plot ###
+
+summary_results <- read.csv('Data/summary_data.csv')
+
+summary_results <- summary_results %>%
+  mutate(sum = ifelse(Taxon == 'Means', TRUE, FALSE)) %>%
+  mutate(Insecta.Earth = as.numeric(str_remove_all(Insecta.Earth, ","))/1000000) %>% 
+  mutate(Insecta.Earth.Lower.CI = as.numeric(str_remove_all(Insecta.Earth.Lower.CI, ","))/1000000) %>% 
+  mutate(Insecta.Earth.Upper.CI = as.numeric(str_remove_all(Insecta.Earth.Upper.CI, ","))/1000000) 
+  
+summary_groups   <- summary_results %>% 
+  filter(sum == FALSE) %>% 
+  mutate(Taxon = factor(Taxon, levels = c("Trees",
+                                          "Amphibians", 
+                                          "Mammals", 
+                                          "Saturniids")))
+
+summary_mean <- summary_results %>% 
+  filter(sum == TRUE)
+  
+
+summary_resutls_fig <- summary_groups %>% 
+  ggplot() +
+  geom_ribbon(aes(x = as.numeric(Taxon), 
+                  ymin = summary_mean$Insecta.Earth.Lower.CI, 
+                  ymax = summary_mean$Insecta.Earth.Upper.CI),
+              alpha = 0.2) +
+  geom_point(aes(x = as.numeric(Taxon), y = Insecta.Earth)) +
+  geom_linerange(aes(x = as.numeric(Taxon), ymin = Insecta.Earth.Lower.CI, ymax = Insecta.Earth.Upper.CI)) +
+  geom_hline(yintercept = summary_mean$Insecta.Earth) +
+  theme_classic() + 
+  scale_x_continuous(
+    breaks = 1:nlevels(summary_groups$Taxon),
+    labels = levels(summary_groups$Taxon),
+    name = "Reference Taxon") +
+  ylab("Earth Insecta Lower Bound \n Estimate (millions)") 
+
+ggsave(summary_resutls_fig, filename = 'Figures/summary.jpeg')  
+
+summary_resutls_fig2 <- summary_groups %>% 
+  ggplot() +
+  geom_point(aes(x = as.numeric(Taxon), y = Insecta.Earth)) +
+  geom_linerange(aes(x = as.numeric(Taxon), ymin = Insecta.Earth.Lower.CI, ymax = Insecta.Earth.Upper.CI)) +
+  geom_hline(yintercept = summary_mean$Insecta.Earth) +
+  #geom_hline(yintercept = summary_mean$Insecta.Earth.Lower.CI, linetype = 'dashed') +
+  #geom_hline(yintercept = summary_mean$Insecta.Earth.Upper.CI, linetype = 'dashed') +
+  theme_classic() + 
+  scale_x_continuous(
+    breaks = 1:nlevels(summary_groups$Taxon),
+    labels = levels(summary_groups$Taxon),
+    name = "Reference Taxon") +
+  ylab("Earth Insecta Lower Bound \n Estimate (millions)")
+
+ggsave(summary_resutls_fig2, filename = 'Figures/summary2.jpeg')  
+
+
+
+### distance decay###
+
+## core malaise traps
+
+micro_malaise_core <- read.csv("Data/raw/Micro_malaise_inter_core.csv") %>% 
+  select(uri, extrainfo, lat, long, code)
+
+ESG_CRMSA <- micro_malaise_core %>% filter(extrainfo == "ESG" & code =='CRMSA' & !is.na(lat)) 
+
+micro_malaise_core2 <- micro_malaise_core %>% 
+  mutate(lat = ifelse(extrainfo == "ESG" & code =='CRMSA', ESG_CRMSA$lat, lat)) %>% 
+  mutate(long = ifelse(extrainfo == "ESG" & code =='CRMSA', ESG_CRMSA$long, long)) %>% 
+  select(uri, lat, long) %>% 
+  group_by(lat,long) %>% mutate(malaise_id = paste0('core', cur_group_id()))
+
+## peripheral malaise traps
+
+micro_malaise_peri <- read.csv("Data/raw/Micro_malaise_inter_peri.csv") %>% 
+  select(uri, extrainfo, lat, long, code)
+
+micro_malaise_peri2 <- micro_malaise_peri %>% 
+  select(uri, lat, long) %>% 
+  group_by(lat,long) %>% mutate(malaise_id = paste0('peripheral', cur_group_id()))
+
+micro_malaise_all <- bind_rows(micro_malaise_peri2, micro_malaise_core2)
+
+lat_lon_malaise_all <-micro_malaise_all  %>% 
+  st_as_sf(
+    coords = c("long", "lat"),
+    agr = "constant",
+    crs = 4326,  ##WGS84   
+    #crs = 4269,
+    stringsAsFactors = FALSE,
+    remove = FALSE)
+
+## Get combinations of traps, combine traps that are in the same location
+
+expand.grid.unique <- function(x, y, include.equals=FALSE)
+{
+  x <- unique(x)
+  
+  y <- unique(y)
+  
+  g <- function(i)
+  {
+    z <- setdiff(y, x[seq_len(i-include.equals)])
+    
+    if(length(z)) cbind(x[i], z, deparse.level=0)
+  }
+  
+  do.call(rbind, lapply(seq_along(x), g))
+}
+
+m_combinations <- expand.grid.unique(unique(lat_lon_malaise_all$malaise_id), unique(lat_lon_malaise_all$malaise_id))  
+
+m_combinations_final <- m_combinations %>% 
+  as.data.frame() %>% 
+  rename(m1 = V1, m2 = V2)
+
+distance_shared <- data.frame()
+
+for(m in 1:nrow(m_combinations_final)){
+  
+  malaise1 <- lat_lon_malaise_all %>% 
+    filter(malaise_id == m_combinations_final$m1[m])
+  
+  malaise2 <- lat_lon_malaise_all %>% 
+    filter(malaise_id == m_combinations_final$m2[m])
+  
+  shared <- length(intersect(malaise1$uri, malaise2$uri))
+  
+  total <- length(unique(c(malaise1$uri, malaise2$uri)))
+  
+  prop_bins_shared <- shared/total
+  
+  m1_loc <- malaise1 %>% 
+    select(-uri, -malaise_id) %>% 
+    unique()
+  m2_loc <- malaise2 %>% 
+    select(-uri, -malaise_id) %>% 
+    unique()
+  
+  distance <- st_distance(m1_loc, m2_loc)
+  
+  distance_shared <- bind_rows(distance_shared, data.frame(prop_bins_shared, distance))
+}
+
+distance_shared_t <- distance_shared %>% 
+  mutate(prop_bins_shared_transformed = asin(sqrt(prop_bins_shared)))
+
+distance_decay_plot <-  
+  ggplot() +
+  geom_point(aes(x = distance, y = prop_bins_shared_transformed), data = distance_shared_t) +
+  theme_classic() +
+  geom_smooth(method = 'lm', se = FALSE, aes(x = distance, y = prop_bins_shared_transformed), data = distance_shared_t) +
+  geom_smooth(aes(x = distance, y = prop_bins_shared_transformed), method = 'lm', se = FALSE, data = filter(distance_shared_t, prop_bins_shared>0), color = 'red') +
+  ylab('Proportion of BINs shared (Arsin sqrt transformed)') +
+  xlab('Distance')  
+
+ggsave(distance_decay_plot, filename = "Figures/distance_decay.jpeg")

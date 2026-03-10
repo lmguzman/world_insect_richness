@@ -58,8 +58,7 @@ estimator <- "    iChao1 (Chiu et al. 2014)"
 ## adding in the trees
 
 #TA = number of tree species in ACG
-TA <- 1500
-TA_alt <- 1200
+TA <- 1200
 
 #Tc = number of tree species in CR
 
@@ -70,17 +69,6 @@ TC <- 2500
 
 TW <- 73274
 TW_CI <- c(73271, 73276)
-
-TW_2 <- 89147
-
-## described number of tree species 
-
-TW_d <- 60065
-
-### Number of Saturniid moths
-
-SA <- 106
-SW <- 4535
 
 ```
 
@@ -119,6 +107,7 @@ micro_care <- as.record(full_micro_table[,-1])
 
 micro_care
 
+set.seed(100)
 # Main step to obtain population size estimates
 CARE1.print(micro_care)
 
@@ -134,6 +123,7 @@ Nhat1 <- round(estN(micro_care, method = "LSC", se = TRUE, nboot = 200))
 
 micro_all_estimate <- Nhat1[1]
 micro_all_CI <- c(Nhat1[3], Nhat1[4])
+micro_all_CI
 ```
 
 ## Step 2. Estimating the undersampling ratio for Core Microgastrinae.
@@ -182,9 +172,9 @@ total_insec_acg <- n_insects_core*(1/proportion_core)
 
 total_insec_acg
 
-CI_total_insect_acg <- n_insects_core*(1/round(CI_proportion_core,3))
+CI_total_insect_acg <- n_insects_core*(1/CI_proportion_core)
 
-n_insects_core*(1/round(CI_proportion_core,3))
+n_insects_core*(1/CI_proportion_core)
 
 n_insects_core*(1/CI_proportion_core)
 
@@ -196,9 +186,9 @@ total_brac_acg <- n_brac_core*(1/proportion_core)
 
 total_brac_acg
 
-CI_total_brac_acg <- n_brac_core*(1/round(CI_proportion_core,3))
+CI_total_brac_acg <- n_brac_core*(1/CI_proportion_core)
 
-n_brac_core*(1/round(CI_proportion_core,3))
+n_brac_core*(1/CI_proportion_core)
 
 n_brac_core*(1/CI_proportion_core)
 
@@ -209,9 +199,9 @@ total_ichn_acg <- n_ichn_core*(1/proportion_core)
 
 total_ichn_acg
 
-CI_total_ichn_acg <- n_ichn_core*(1/round(CI_proportion_core,3))
+CI_total_ichn_acg <- n_ichn_core*(1/CI_proportion_core)
 
-n_ichn_core*(1/round(CI_proportion_core,3))
+n_ichn_core*(1/CI_proportion_core)
 
 n_ichn_core*(1/CI_proportion_core)
 
@@ -222,9 +212,9 @@ total_hym_acg <- n_hym_core*(1/proportion_core)
 
 total_hym_acg
 
-CI_total_hym_acg <- n_hym_core*(1/round(CI_proportion_core,3))
+CI_total_hym_acg <- n_hym_core*(1/CI_proportion_core)
 
-n_hym_core*(1/round(CI_proportion_core,3))
+n_hym_core*(1/CI_proportion_core)
 
 n_hym_core*(1/CI_proportion_core)
 
@@ -233,19 +223,19 @@ CI_total_hym_acg
 ## compile results
 
 compiled_results <- data.frame(Taxonomic_group = c('Insecta', "Hymenoptera", 
-                                                   "Ichneumonoidea", "Braconidae"),
+                                                   "Ichneumonoidea", "Braconidae", "Microgastrinae"),
                                total_core = c(n_insects_core, n_hym_core, 
-                                              n_ichn_core, n_brac_core),
+                                              n_ichn_core, n_brac_core, nrow(core)),
                                total_acg = c(total_insec_acg, total_hym_acg,
-                                            total_ichn_acg, total_brac_acg),
+                                            total_ichn_acg, total_brac_acg, micro_all_estimate),
                                CI_low = c(CI_total_insect_acg[1],
                                           CI_total_hym_acg[1],
                                           CI_total_ichn_acg[1],
-                                          CI_total_brac_acg[1]),
+                                          CI_total_brac_acg[1], micro_all_CI[1]),
                                CI_high = c(CI_total_insect_acg[2],
                                           CI_total_hym_acg[2],
                                           CI_total_ichn_acg[2],
-                                          CI_total_brac_acg[2]))
+                                          CI_total_brac_acg[2], micro_all_CI[2]))
 
 compiled_results
 ```
@@ -268,7 +258,7 @@ CI_total_insect_world
 
 ##### Total Hymenoptera 
 
-print("Total world insects based on estimated tree richness")
+print("Total world Hymenoptera based on estimated tree richness")
 
 total_hym_world <- (TW*total_hym_acg)/TA 
 total_hym_world
@@ -280,7 +270,7 @@ CI_total_hym_world
 
 ##### Total Ichneumonoidea
 
-print("Total world insects based on estimated tree richness")
+print("Total world Ichneumonoidea based on estimated tree richness")
 
 total_ichn_world <- (TW*total_ichn_acg)/TA 
 total_ichn_world
@@ -292,7 +282,7 @@ CI_total_ichn_world
 
 ##### Total Braconidae 
 
-print("Total world insects based on estimated tree richness")
+print("Total world Braconidae based on estimated tree richness")
 
 total_brac_world <- (TW*total_brac_acg)/TA 
 total_brac_world
@@ -301,6 +291,17 @@ CI_total_brac_world <- (TW*CI_total_brac_acg)/TA
 
 CI_total_brac_world
 
+##### Total Microgastrinae 
+
+print("Total world Microgastrinae based on estimated tree richness")
+
+total_micro_world <- (TW*micro_all_estimate)/TA 
+total_micro_world
+
+CI_total_micro_world <- (TW*micro_all_CI)/TA 
+
+CI_total_micro_world
+
 ## compile results
 
 compiled_results_all <- bind_cols(compiled_results, 
@@ -308,16 +309,21 @@ compiled_results_all <- bind_cols(compiled_results,
                                                c(total_insect_world,
                                                  total_hym_world,
                                                  total_ichn_world,
-                                                 total_brac_world),
+                                                 total_brac_world,
+                                                 total_micro_world),
                                              CI_w_low = c(CI_total_insect_world[1],
                                                           CI_total_hym_world[1],
                                                           CI_total_ichn_world[1],
-                                                          CI_total_brac_world[1]),
+                                                          CI_total_brac_world[1],
+                                                          CI_total_micro_world[1]),
                                              CI_w_high = c(CI_total_insect_world[2],
                                                           CI_total_hym_world[2],
                                                           CI_total_ichn_world[2],
-                                                          CI_total_brac_world[2])))
+                                                          CI_total_brac_world[2],
+                                                          CI_total_micro_world[2])))
 
-compiled_results_all
+compiled_results_all %>% 
+    mutate(across(where(is.numeric), round))
+
 
 ```
