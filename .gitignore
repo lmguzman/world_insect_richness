@@ -2,9 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-/shapefiles
-Data/DanielSoutoV-MEE/
-R/Dec8_V2_03_probability_malaise.pdf
+shapefiles/
+Data/raw
 R/other_attemps.qmd
-summary_percent_malaise_Dec_3_2025.csv
-Data/raw/CR_all_rec_report_output.tsv
+Data/DanielSoutoV-MEE/

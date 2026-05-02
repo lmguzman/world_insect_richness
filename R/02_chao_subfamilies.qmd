@@ -1,0 +1,177 @@
+---
+title: "R Code and Output for Chao estimate other subfamilies"
+format: pdf
+editor: visual
+---
+
+Load packages
+
+```{r, warning =FALSE, message = FALSE}
+library(dplyr)
+library(SpadeR)
+library(stringr)
+estimator <- "    iChao1 (Chiu et al. 2014)"
+
+```
+
+List subfamilies from excel file
+
+```{r}
+sub_families_list <- list.files("../Data/BIN_abundance_subfamilies/", 
+                                full.names = TRUE)
+```
+
+Calculate iChao1 for both reared and core and compile for all species
+
+```{r, warning =FALSE}
+set.seed(100)
+sub_family_outputs_all <- data.frame()
+
+for(fm in sub_families_list){
+  
+  
+  ## load data
+  
+  data_all <- read.csv(fm)
+  
+  ## filter for core and reared
+  
+  core <- select(data_all, BIN, count = Core_Frequency) %>% 
+    filter(!is.na(count)) %>% 
+    mutate(source = 'core')
+  
+  reared <- select(data_all, BIN= BIN, count = Reared_Frequency) %>% 
+    filter(!is.na(count)) %>% 
+    mutate(source = 'reared')
+  
+  ## summarise total bins
+  
+  total <- 
+    bind_rows(core, reared) %>% 
+    group_by(BIN) %>% 
+    summarise(count = sum(count))
+
+  ## calculate shared, reared only and malaise only
+  
+  shared <- unique(c(core$BIN[core$BIN %in% reared$BIN], 
+                     reared$BIN[reared$BIN %in% core$BIN]))
+  
+  reared_only <- reared$BIN[!reared$BIN %in% core$BIN]
+  
+  core_only <- core$BIN[!core$BIN %in% reared$BIN]
+  
+  ## Estimate iChao for core -- use try catch for subfamilies with too few bins
+  
+  core_estimate <- tryCatch({ 
+    ChaoSpecies(core$count,"abundance",k=10,conf=0.95)},
+           error = function(e) {
+  template_result <- ChaoSpecies(reared$count, "abundance", k=10, conf=0.95)
+  na_matrix <- template_result
+  na_matrix$Species_table[] <- NA 
+  na_matrix$Basic_data_information[] <- NA 
+  return(na_matrix)
+  })
+
+  ## Estimate iChao for reared 
+  
+  reared_estimate <- ChaoSpecies(reared$count,"abundance",k=10,conf=0.95)
+
+  subfamily <- str_remove(str_remove(fm,  "../Data/BIN_abundance_subfamilies//"), ".csv")
+  
+  ## compile results in data frame
+  
+  sub_family_outputs_1 <- data.frame(subfamily = subfamily, 
+                                     total_n_bin = nrow(total), 
+                                     shared_bins = length(shared), 
+                                     proportion_shared = length(shared)/nrow(total),
+                                     nreared_total_bin = nrow(reared),
+                                     reared_only = length(reared_only),
+                                     core_only = length(core_only),
+                                     reared_Chao1_estimate = reared_estimate$Species_table[estimator, 'Estimate'],
+                                     reared_Chao1_se = reared_estimate$Species_table[estimator, 's.e.'], 
+                                     reared_Chao1_95_lower = reared_estimate$Species_table[estimator, '95%Lower'], 
+                                     reared_Chao1_95_upper = reared_estimate$Species_table[estimator, '95%Upper'], 
+                                     reared_Chao1_CV = reared_estimate$Basic_data_information["    CV for entire dataset",2],
+                                     reared_Chao1_Coverage = reared_estimate$Basic_data_information["    Coverage estimate for entire dataset",2], 
+                                     core_total_bin = nrow(core), core_Chao1_estimate = core_estimate$Species_table[estimator, 'Estimate'], 
+                                     core_Chao1_se = core_estimate$Species_table[estimator, 's.e.'], 
+                                     core_Chao1_95_lower = core_estimate$Species_table[estimator, '95%Lower'], 
+                                     core_Chao1_95_upper = core_estimate$Species_table[estimator, '95%Upper'], 
+                                     core_Chao1_CV = core_estimate$Basic_data_information["    CV for entire dataset",2], 
+                                     core_Chao1_Coverage = core_estimate$Basic_data_information["    Coverage estimate for entire dataset",2])
+  
+  sub_family_outputs_all <- bind_rows(sub_family_outputs_all, sub_family_outputs_1)
+}
+
+rownames(sub_family_outputs_all) <- NULL
+ 
+sub_family_outputs_all <- sub_family_outputs_all %>% 
+  filter(!is.na(core_Chao1_estimate), subfamily != "Homolobinae")
+```
+
+Reared summary table
+
+```{r}
+
+reared_summary <-sub_family_outputs_all %>%  select(subfamily, total_n_bin, nreared_total_bin, reared_Chao1_estimate) %>% arrange(desc(nreared_total_bin)) %>%
+  mutate(reared_rank = 1:n()) %>% 
+  mutate(reared_Chao1_estimate = round(reared_Chao1_estimate)) %>% 
+  mutate(reared_completeness = round(nreared_total_bin/reared_Chao1_estimate,2)) %>% 
+  arrange(desc(reared_completeness)) %>% 
+  mutate(reared_completeness_rank = 1:n()) %>% 
+  arrange(desc(total_n_bin)) 
+
+reared_summary
+
+reared_summary$nreared_total_bin %>% mean() %>% round()
+reared_summary$reared_Chao1_estimate %>% sd() %>% round()
+
+```
+
+Core summary table
+
+```{r}
+
+core_summary <-sub_family_outputs_all %>%  select(subfamily, total_n_bin, core_total_bin, core_Chao1_estimate) %>% arrange(desc(core_total_bin)) %>%
+  mutate(core_rank = 1:n()) %>% 
+  mutate(core_Chao1_estimate = round(core_Chao1_estimate)) %>% 
+  mutate(core_completeness = round(core_total_bin/core_Chao1_estimate,2)) %>% 
+  arrange(desc(core_completeness)) %>% 
+  mutate(core_completeness_rank = 1:n()) %>% 
+  arrange(desc(total_n_bin)) 
+
+core_summary
+
+core_summary$core_Chao1_estimate %>% sd() %>% round()
+core_summary$core_completeness %>% sd() %>% round(2)
+```
+
+Combined reared and core completeness
+
+```{r}
+all_summary  <- select(reared_summary, subfamily, total_n_bin, reared_completeness) %>% 
+  left_join(select(core_summary,  subfamily, total_n_bin,core_completeness)) %>% mutate(mean_completenees = round((reared_completeness+core_completeness)/2, 2)) %>%
+  arrange(desc(mean_completenees)) %>%
+  mutate(completeness_rank = 1:n()) %>% 
+  arrange(desc(total_n_bin)) 
+
+all_summary 
+
+all_summary$mean_completenees %>% sd() %>% round(3)
+
+```
+
+```{r}
+
+shared_summary <- sub_family_outputs_all %>%  select(subfamily, reared_only, core_only,shared_bins,total_n_bin, proportion_shared) %>% 
+  mutate(proportion_shared = round(proportion_shared, 2)) %>% 
+  arrange(desc(proportion_shared)) %>% 
+  mutate(shared_rank = 1:n()) %>% 
+  arrange(desc(total_n_bin)) 
+
+shared_summary 
+
+shared_summary$proportion_shared %>% sd() %>% round(2)
+
+shared_summary$total_n_bin %>% sum()
+```

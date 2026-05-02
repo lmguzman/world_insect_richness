@@ -1,212 +1,316 @@
-###Colwell et al - species estimate 2025 - R codes###
-
 library(tidyverse)
-library(VennDiagram)
-library(dplyr)
 
-Data=read.delim(file = "Data/raw/CR_all_rec_report_output.tsv", sep = '\t')
+#### Load complete data  #####
 
+Costa_rica_data <- read.delim(file = "Data/Raw/CR_all_rec_report_output.tsv", sep = '\t')
 
-###count full ACG
-allACG_1=Data%>%
-  filter((str_detect(fieldid, "SRNP")))
+#### 01_main analysis ####
 
-allACG_3=Data%>%
-  filter(str_detect(subfamily, "Microgastrinae"))%>%
-  filter((str_detect(extrainfo,"ALTM|BARB|Ceibo|Hitoy|PE-SINAC|ICOCO|Quetzales|Sirena|TORTUG|Baru|Boconera|DOLE|Kasiiya")))%>%
-  filter(!uri=="")%>%
-  distinct(uri, .keep_all = TRUE)
+##### CORE Traps #####
 
-allACG_2=Data%>%
-  filter(str_detect(subfamily, "Microgastrinae"))%>%
-  filter((str_detect(extrainfo,"ESG|BSE|PL12|Derrumbe|SSM|SMNR|SMNPL|Pedregal|Harold|Circular|Gongora|Cima|Arenales|CJAN|NAR|SGF|SGC|BT0|LDR|MBT|Sombra|LuzSol|Pitilla|malaise-trapped")))%>%
-  filter(!uri=="")%>%
-distinct(uri, .keep_all = TRUE)
-                                                      
-allACG_M=allACG_2%>%
-  #filter(str_detect(subfamily, "Microgastrinae"))%>%
-  #filter((str_detect(extrainfo,"ESG|BSE|PL12|Derrumbe")))%>%
-  #filter((str_detect(class, "Insecta")))%>%
-  filter(!uri=="")%>%
-  group_by(uri) %>%
-  dplyr::summarize(count = n()) %>%
-  ungroup()
+#### Core AGC all Insecta 
 
-
-allACG=rbind(allACG_1,allACG_2)
-allACGInsects=allACG%>%
-  #filter((str_detect(extrainfo,"ESG|BSE|PL12|Derrumbe")))%>%
-  filter((str_detect(class, "Insecta")))%>%
-  filter(!uri=="")%>%
-  group_by(uri) %>%
-  dplyr::summarize(count = n()) %>%
-  ungroup()
-
-###count reared BINs in ACG
-query_reared = Data%>%
-  filter(str_detect(subfamily, "Microgastrinae"))%>%
-  filter((str_detect(fieldid, "SRNP")))%>%
-  filter((nchar(fieldid)<=13))%>%
-  filter(!str_detect(extrainfo,"malaise|Malaise"))%>%
-  filter(!extrainfo=="")%>%
-  filter(!str_detect(extrainfo,"net|light"))%>%
-  filter(!uri=="")%>%
-  arrange(lat) %>%
-  filter(duplicated(lat) == FALSE)
-
-reared_tax=query_reared%>%
-  filter((str_detect(family, "Braconidae|Ichneumonidae")))%>%
-  group_by(uri) %>%
-  summarize(count = n()) %>%
-  ungroup()
-
-reared_tax_host=query_reared%>%
-  filter((str_detect(family, "Braconidae|Ichneumonidae")))%>%
-  group_by(extrainfo) %>%
-  summarize(count = n()) %>%
-  ungroup()
-
-reared_count = query_reared %>%
-  group_by(uri) %>%
-  summarize(count = n()) %>%
-  ungroup()
-
-write.csv(allACG_M,"Data/Microgastrines_forTree.csv")
-
-###count Malaise BINs in ACG
-
-##Filter All ACG Malaise
-query_allACG = Data%>%
-  #filter(str_detect(subfamily, "Microgastrinae"))%>%
-  filter((str_detect(extrainfo,"ESG|BSE|PL12|Derrumbe|SSM|SMNR|SMNPL|Pedregal|Harold|Circular|Gongora|Cima|Arenales|CJAN|NAR|SGF|SGC|BT0|LDR|MBT|Sombra|LuzSol|Pitilla|malaise-trapped")))%>%
-  filter(!uri=="")
-
-allMalaise_count = query_allACG %>%
-  filter((str_detect(class, "Insecta")))%>%
-  group_by(uri) %>%
-  dplyr::summarize(count = n()) %>%
-  ungroup()
-
-allMalaise_count_richness = allMalaise_count %>%
-  count(count)%>%
-  complete(count=1:748,fill = list(n= 0))
-allMalaise_count_richness =as.data.frame(allMalaise_count_richness)
-
-write.csv(reared_count,"Data/Micrograstrinae_AGCAllNov2024.csv")
-  
-##Filter Core ACG (Traps that have been completely processed)
-query_coreACG = Data%>%
-  #filter(str_detect(subfamily, "Microgastrinae"))%>%  
+coreACG_all <- Costa_rica_data%>%
   filter((str_detect(extrainfo,"ESG|BSE|PL12|Derrumbe")))%>%
+  filter(str_detect(class, "Insecta"))%>%
   filter(!uri=="")
-  
-seqACG_count = query_coreACG %>%
-  group_by(nucraw_length) %>%
-  summarize(count = n()) %>%
-  ungroup()
 
-seqACG_na=query_coreACG %>%
-  filter(is.na(nucraw_length))%>%
-  group_by(order) %>%
-  summarize(count = n()) %>%
-  ungroup()
+coreACG_BIN <- coreACG_all%>%
+  group_by(uri) %>%
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
 
-coreACG_count = query_coreACG %>%
-  filter (str_detect(class,"Insecta"))%>%
+write.csv(coreACG_BIN, 'Data/Insecta_ACG_Core_Malaise.csv', row.names = FALSE)
+
+
+##### Core traps Microgastrinae
+
+coreACG_Micro <- coreACG_all%>%
+  filter(str_detect(subfamily, "Microgastrinae"))
+
+write.csv(coreACG_Micro, 'Data/Intermediate/Microgastrinae_ACG_Core_Malaise.csv', row.names = FALSE)
+
+coreACG_Micro_BIN <- coreACG_Micro%>%
+  group_by(uri) %>%
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
+
+write.csv(coreACG_Micro_BIN, 'Data/Microgastrinae_ACG_Core_Malaise.csv', row.names = FALSE)
+
+
+##### PERIPHERAL TRAPS ####
+
+#### Peripheral traps microgastrinae
+
+periACG_micro <- Costa_rica_data %>%
   filter(str_detect(subfamily, "Microgastrinae"))%>%
+  filter((str_detect(extrainfo,"SSM|SMNR|SMNPL|Pedregal|Harold|Circular|Gongora|Cima|Arenales|CJAN|NAR|SGF|SGC|BT0|LDR|MBT|Sombra|LuzSol|Pitilla|malaise-trapped")))%>%
+  filter(!uri=="")
+
+periACG_MicroBIN <- periACG_micro%>%
   group_by(uri) %>%
-  dplyr::summarize(count = n()) %>%
-  ungroup()
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
 
-orderACG_count = query_coreACG %>%
-  group_by(order) %>%
-  summarize(count = n()) %>%
-  ungroup()
+write.csv(periACG_MicroBIN, 'Data/Microgastrinae_ACG_Peripheral_Malaise.csv', row.names = FALSE)
 
-coreACG_count_richness = coreACG_count %>%
-  count(count)%>%
-  complete(count=1:403,fill = list(n= 0))
-coreACG_count_richness =as.data.frame(coreACG_count_richness)
+##### REARED SPECIMENS ####
 
+# reared Microgastrinae
+
+rearedACG_all <- Costa_rica_data %>%
+  filter(str_detect(subfamily, "Microgastrinae"))%>%
+  filter((str_detect(sampleid, "DHJPAR")))%>%
+  filter(!str_detect(extrainfo,"malaise|light|trapped"))%>%
+  filter(!extrainfo=="")%>%
+  filter(!uri=="")
+
+write.csv(rearedACG_all, 'Data/Intermediate/Microgastrinae_ACG_reared.csv', row.names = FALSE)
+
+rearedACG_MicroBIN <- rearedACG_all%>%
+  group_by(uri) %>%
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
+
+write.csv(rearedACG_MicroBIN, 'Data/Microgastrinae_ACG_reared.csv', row.names = FALSE)
+
+#### 02_other subfamilies ####
+
+sub_families <- c("Agathidinae", "Anomaloninae", "Campopleginae", "Cardiochilinae",
+                       "Cheloninae", "Euphorinae", "Homolobinae", "Macrocentrinae", "Mesochorinae",
+                       "Metopiinae", "Microgastrinae", "Ophioninae", "Orgilinae", "Rogadinae", "Tryphoninae")
+
+for(sf in sub_families){
   
-##Filter peripheral ACG (traps that have only been partially processed)
-query_peripherieACG = Data%>%
-    filter(str_detect(subfamily, "Microgastrinae"))%>%
-    filter((str_detect(extrainfo,"SSM|SMNR|SMNPL|Pedregal|Harold|Circular|Gongora|Cima|Arenales|CJAN|NAR|SGF|SGC|BT0|LDR|MBT|Sombra|LuzSol|Pitilla|malaise-trapped")))%>%  
+  ## filter core data by subfamily 
+  
+  coreACG_sf <- coreACG_all%>%
+    filter(str_detect(subfamily, sf))
+  
+  coreACG_sf_BIN <- coreACG_sf%>%
+    group_by(uri) %>%
+    dplyr::summarize(Core_Frequency = n()) %>%
+    ungroup() %>% 
+    rename(BIN = uri)
+  
+  ## filter reared data by subfamily 
+  
+  rearedACG_sf <- Costa_rica_data %>%
+    filter(str_detect(subfamily, sf))%>%
+    filter((str_detect(sampleid, "DHJPAR")))%>%
+    filter(!str_detect(extrainfo,"malaise|light|trapped"))%>%
+    filter(!extrainfo=="")%>%
     filter(!uri=="")
-    
-peripherie_count = query_peripherieACG %>%
+  
+  rearedACG_sf_BIN <- rearedACG_sf%>%
+    group_by(uri) %>%
+    dplyr::summarize(Reared_Frequency = n()) %>%
+    ungroup() %>% 
+    rename(BIN = uri)
+  
+  sf_BIN_count <- full_join(coreACG_sf_BIN, rearedACG_sf_BIN)
+  
+  write.csv(sf_BIN_count, paste0("Data/BIN_abundance_subfamilies/", sf, ".csv"), row.names = FALSE)
+}
+
+#### 03_probability malaise trapping ####
+
+insect_order_core_bin <- coreACG_all %>% 
+  select(BIN = uri, order) %>% 
+  unique() %>% 
+  group_by(order) %>% 
+  summarise(distinctBINs = n()) 
+  
+write.csv(insect_order_core_bin, "Data/Insect_Orders_count.csv", row.names = FALSE)
+
+
+#### 04_supplement ####
+
+## Braconidae
+
+coreACG_Brac <- coreACG_all %>% 
+  filter(family == 'Braconidae')
+
+coreACG_BIN_brac <- coreACG_Brac%>%
   group_by(uri) %>%
-  dplyr::summarize(count = n()) %>%
-  ungroup()
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
 
-peripherie_trap = query_peripherieACG %>%
-  group_by(lat) %>%
-  summarize(count = n()) %>%
-  ungroup()
+write.csv(coreACG_BIN_brac, 'Data/Braconidae_ACG_Core_Malaise.csv', row.names = FALSE)
 
-peripherie_count_richness = peripherie_count %>%
-  count(count)%>%
-  complete(count=1:692,fill = list(n= 0))
-peripherie_count_richness =as.data.frame(peripherie_count_richness)
+## Ichneumonoidea 
+
+coreACG_Ichn <- coreACG_all %>% 
+  filter(family %in% c('Braconidae', 'Ichneumonidae'))
+
+coreACG_BIN_Ichn <- coreACG_Ichn%>%
+  group_by(uri) %>%
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
+
+write.csv(coreACG_BIN_Ichn, 'Data/Ichneumonoidea_ACG_Core_Malaise.csv', row.names = FALSE)
+
+## Hymenoptera
+
+coreACG_Hym <- coreACG_all %>% 
+  filter(order == 'Hymenoptera')
+
+coreACG_BIN_Hym <- coreACG_Hym%>%
+  group_by(uri) %>%
+  dplyr::summarize(Frequency = n()) %>%
+  ungroup() %>% 
+  rename(BIN = uri)
+
+write.csv(coreACG_BIN_Hym, 'Data/Hymenoptera_ACG_Core_Malaise.csv', row.names = FALSE)
 
 
-##reared vs malaise
-overlap_reared=peripherie_count%>%
-  inner_join(coreACG_count, by="uri")
+#### Figures ####
 
-##both malaise
-overlap_malaise=reared_count%>%
-  inner_join(allMalaise_count, by="uri")
+## Malaise trap locations
 
-write.csv(peripherie_count,"Data/Micrograstrinae_AGCPeripherieNov2024.csv")
+locations_core <- coreACG_all %>% 
+  filter(str_detect(subfamily, "Microgastrinae")) %>% 
+  select(lat, long) %>% 
+  filter(!is.na(lat)) %>%
+  unique() %>% 
+  mutate(trap = 'core')
 
+
+## Peripheral locations
+
+peripheral_mapping <- readxl::read_excel("Data/peri_locations_mapping.xlsx", sheet = 2) %>% 
+  rename(lat = `lat(old)`, long = `lon (old)`, new_lat = `lat (in map)`, new_long = `lon (in map)`)
+
+original_peripheral_locations <- periACG_micro %>% 
+  filter(str_detect(subfamily, "Microgastrinae")) %>% 
+  select(lat, long) %>% 
+  filter(!is.na(lat)) %>%
+  unique() 
+
+locations_peripheral <- original_peripheral_locations %>% 
+  left_join(peripheral_mapping) %>% 
+  mutate(new_lat = ifelse(`...6` == "CRI|NO02_527|MBT1", 10.92, new_lat)) %>% 
+  mutate(new_long = ifelse(`...6` == "CRI|NO02_527|MBT1", -85.72, new_long)) %>% 
+  mutate(new_lat = ifelse(is.na(new_lat), 10.80396, new_lat),
+         new_long = ifelse(is.na(new_long), -85.32524, new_long)) %>% 
+  select(new_lat, new_long) %>% unique() %>% 
+  mutate(trap = 'peripheral') %>% 
+  rename(lat = new_lat, long = new_long)
+
+
+locations <- bind_rows(locations_peripheral, locations_core)
+
+write.csv(locations, "Data/Locations/malaise_traps.csv", row.names = FALSE)
+
+## rearing locations 
+
+rearing_locations <- rearedACG_all %>% 
+  select(lat, long) %>% unique()
+
+write.csv(rearing_locations, "Data/Locations/rearing.csv", row.names = FALSE)
+
+## peripheral locations for distance decay
+
+periACG_micro_lat_fixed <- periACG_micro %>% 
+  left_join(peripheral_mapping) %>% 
+  mutate(new_lat = ifelse(`...6` == "CRI|NO02_527|MBT1", 10.92, new_lat)) %>% 
+  mutate(new_long = ifelse(`...6` == "CRI|NO02_527|MBT1", -85.72, new_long)) %>% 
+  mutate(new_lat = ifelse(is.na(new_lat), 10.80396, new_lat),
+         new_long = ifelse(is.na(new_long), -85.32524, new_long)) %>% 
+  select(-lat, -long) %>% 
+  rename(lat = new_lat, long = new_long)
   
-##Bar chart displaying BINs per taxon  
-coreACGBIN_count = query_coreACG %>%
-  group_by(order) %>%
-  summarise(distinctBINs= n_distinct(uri))
-  
-ggplot(coreACGBIN_count,aes(x=reorder(order, -distinctBINs), y=distinctBINs, color=order, fill=order))+
-  geom_bar(stat="identity")+
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle=75, hjust=1, size =15),
-        axis.text.y=element_text(size=15),
-        axis.title=element_text(size=20,face="bold"))+
-  coord_cartesian(ylim = c(0, 10000))+
-  scale_y_continuous(expand = c(0,0))+
-  geom_text(aes(label=distinctBINs), vjust=-0.5, color="black",
-            position = position_dodge(0.5), size=5)+
-  labs(y= "BIN count", x = "Order")+
-  theme(
-    # Hide panel borders and remove grid lines
-    axis.line=element_line(size=0.25),
-    panel.border = element_blank(),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.background = element_blank())
-  
+write.csv(periACG_micro_lat_fixed, 'Data/Intermediate/Microgastrinae_ACG_Peripheral_Malaise.csv', row.names = FALSE)
 
-##overlap reared ACG and malaise ACG
-# query_reared_single = query_reared%>%
-#   distinct(uri, .keep_all = TRUE)
-# 
-# ovl_2=
-#   query_reared_single%>%
-#   inner_join(AllACG3, by="uri")
-# 
-# perct_all=nrow(ovl_2)/nrow(query_reared_single)
-# estimate_all=nrow(query_reared_single)/perct_all
-# 
-# 
-# #empty plot cache (repeat every time before plotting a diagram)
-# while (dev.cur()>1) dev.off()
-# 
-# #draw pairwise Venn diagram (for category attribute, any label can be used)
-# draw.pairwise.venn(
-#   area1=round(av_tes1),
-#   area2=round(av_tes2),
-#   cross.area = round(av_over),
-#   category=c("sample 1","sample 2"),
-#   fill=c("red","green"),
-#   cex=c(3,3,3))
+#### Key stats ####
+
+# number of records for core traps
+nrow(coreACG_Micro)
+#3781
+
+# number of records for peripheral traps
+nrow(periACG_micro)
+#6515
+  
+# number of records for rearing micro
+nrow(rearedACG_all)
+# 11373
+
+# number of caterpillar species 
+rearedACG_all$extrainfo %>% unique() %>% length()
+# 1523
+
+# total number of records
+3781+6515+11373
+#21669
+
+# unique number of micro bins
+c(coreACG_Micro$uri, periACG_micro$uri, rearedACG_all$uri) %>% unique() %>% length()
+c(coreACG_Micro$uri,rearedACG_all$uri) %>% unique() %>% length()
+
+#1414
+
+# total number of parasitic wasps
+rearedACG_hym <- Costa_rica_data %>%
+  filter(order == 'Hymenoptera') %>% 
+  filter((str_detect(sampleid, "DHJPAR")))%>%
+  filter(!str_detect(extrainfo,"malaise|light|trapped"))%>%
+  filter(!extrainfo=="")%>%
+  filter(!uri=="")
+
+rearedACG_hym$uri %>% unique %>% length()
+# 2618
+
+# number of reared caterpillars
+rearedACG_hym$extrainfo %>% unique () %>% length()
+#2967
+
+
+## shared core, peripheral, rearing
+
+core_bins <- data.frame(BIN = unique(coreACG_Micro$uri), core = 1)
+peri_bins <- data.frame(BIN = unique(periACG_micro$uri), peri = 1)
+reared_bins <- data.frame(BIN = unique(rearedACG_all$uri), reared =1)
+
+all_bins <- full_join(core_bins,peri_bins) %>% 
+  full_join(reared_bins)
+
+## share by all
+
+all_bins %>% filter(core == 1 & peri == 1 & reared == 1) %>% nrow()
+#69
+
+# share by reared and core but not peripheral
+
+all_bins %>% filter(core == 1 & is.na(peri) & reared == 1) %>% nrow()
+#40
+
+# share by reared and peripheral but not core
+
+all_bins %>% filter(is.na(core) & peri == 1 & reared == 1) %>% nrow()
+#114
+
+# share by peripheral and core but not reared 
+
+all_bins %>% filter(core == 1 & peri == 1 & is.na(reared)) %>% nrow()
+#147
+
+# unique core
+
+all_bins %>% filter(core == 1 & is.na(peri) & is.na(reared)) %>% nrow()
+#132
+
+# unique peripheral 
+all_bins %>% filter(is.na(core) & peri == 1 & is.na(reared)) %>% nrow()
+#246 
+
+# unique to reared 
+
+all_bins %>% filter(is.na(core) & is.na(peri) & reared == 1) %>% nrow()
+#666
